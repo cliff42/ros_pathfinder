@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            "talker = ros_pathfinder.imu_publisher:main",
+            "listener = ros_pathfinder.test_subscriber:main"
         ],
     },
 )
