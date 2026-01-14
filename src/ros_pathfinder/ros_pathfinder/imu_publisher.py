@@ -2,7 +2,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from std_msgs.msg import String
+from std_msgs.msg import String, Float64MultiArray
 from smbus2 import SMBus, i2c_msg
 
 as5600 = 0x36
@@ -19,14 +19,14 @@ class IMUPublisher(Node):
 
     def __init__(self):
         super().__init__('imu_publisher')
-        self.publisher_ = self.create_publisher(String, 'test_topic', 10)
-        timer_period = 0.5  # seconds
+        self.publisher_ = self.create_publisher(Float64MultiArray, 'test_topic', 10)
+        timer_period = 0.05  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.i = 0
 
     def timer_callback(self):
-        msg = String()
-        msg.data = 'iteration: %d, status (1): %d, raw_angle (1): %d, status (2): %d, raw_angle (2): %d' % (self.i, self.get_status(bus1), self.get_raw_angle(bus1), self.get_status(bus2), self.get_raw_angle(bus2))
+        msg = Float64MultiArray()
+        msg.data = [self.get_raw_angle(bus1), self.get_raw_angle(bus2)]
         self.publisher_.publish(msg)
         self.get_logger().info('Publishing: "%s"' % msg.data)
         self.i += 1
