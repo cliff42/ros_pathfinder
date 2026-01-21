@@ -1,0 +1,54 @@
+[0.027s] Invoking command in '/home/pirobot/git/ros_pathfinder/build/action_interfaces': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/pirobot/git/ros_pathfinder/src/action_interfaces -DCMAKE_INSTALL_PREFIX=/home/pirobot/git/ros_pathfinder/install/action_interfaces
+[0.056s] -- Found ament_cmake: 2.7.3 (/opt/ros/kilted/share/ament_cmake/cmake)
+[0.472s] -- Found ament_lint_auto: 0.19.2 (/opt/ros/kilted/share/ament_lint_auto/cmake)
+[0.726s] -- Found rosidl_default_generators: 1.7.1 (/opt/ros/kilted/share/rosidl_default_generators/cmake)
+[0.729s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.779s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.827s] -- Found rosidl_adapter: 4.9.5 (/opt/ros/kilted/share/rosidl_adapter/cmake)
+[1.284s] [31mCMake Error at /opt/ros/kilted/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:57 (message):
+[1.285s]   execute_process(/usr/bin/python3 -m rosidl_adapter --package-name
+[1.285s]   action_interfaces --arguments-file
+[1.285s]   /home/pirobot/git/ros_pathfinder/build/action_interfaces/rosidl_adapter__arguments__action_interfaces.json
+[1.285s]   --output-dir
+[1.285s]   /home/pirobot/git/ros_pathfinder/build/action_interfaces/rosidl_adapter/action_interfaces
+[1.285s]   --output-file
+[1.285s]   /home/pirobot/git/ros_pathfinder/build/action_interfaces/rosidl_adapter/action_interfaces.idls)
+[1.285s]   returned error code 1:
+[1.285s] 
+[1.286s]   Traceback (most recent call last):
+[1.286s] 
+[1.286s]     File "<frozen runpy>", line 198, in _run_module_as_main
+[1.286s]     File "<frozen runpy>", line 88, in _run_code
+[1.286s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/__main__.py", line 19, in <module>
+[1.286s]       main()
+[1.286s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/main.py", line 54, in main
+[1.286s]       abs_idl_file = convert_to_idl(
+[1.286s]                      ^^^^^^^^^^^^^^^
+[1.286s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/__init__.py", line 32, in convert_to_idl
+[1.287s]       return convert_action_to_idl(
+[1.287s]              ^^^^^^^^^^^^^^^^^^^^^^
+[1.287s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/action/__init__.py", line 31, in convert_action_to_idl
+[1.287s]       action = parse_action_string(package_name, input_file.stem, content)
+[1.287s]                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[1.287s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/parser.py", line 933, in parse_action_string
+[1.287s]       goal_message = parse_message_string(
+[1.287s]                      ^^^^^^^^^^^^^^^^^^^^^
+[1.287s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/parser.py", line 563, in parse_message_string
+[1.287s]       msg = MessageSpecification(pkg_name, msg_name, fields, constants)
+[1.287s]             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[1.287s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/parser.py", line 406, in __init__
+[1.288s]       self.base_type = BaseType(
+[1.288s]                        ^^^^^^^^^
+[1.288s]     File "/opt/ros/kilted/lib/python3.12/site-packages/rosidl_adapter/parser.py", line 221, in __init__
+[1.288s]       raise InvalidResourceName(
+[1.288s] 
+[1.288s]   rosidl_adapter.parser.InvalidResourceName: 'motorControl_Goal' is an
+[1.288s]   invalid message name.  It should have the pattern '^[A-Z][A-Za-z0-9]*$'
+[1.288s] 
+[1.288s] Call Stack (most recent call first):
+[1.288s]   /opt/ros/kilted/share/rosidl_cmake/cmake/rosidl_generate_interfaces.cmake:132 (rosidl_adapt_interfaces)
+[1.288s]   CMakeLists.txt:28 (rosidl_generate_interfaces)
+[1.289s] 
+[1.289s] [0m
+[1.289s] -- Configuring incomplete, errors occurred!
+[1.298s] Invoked command in '/home/pirobot/git/ros_pathfinder/build/action_interfaces' returned '1': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/pirobot/git/ros_pathfinder/src/action_interfaces -DCMAKE_INSTALL_PREFIX=/home/pirobot/git/ros_pathfinder/install/action_interfaces

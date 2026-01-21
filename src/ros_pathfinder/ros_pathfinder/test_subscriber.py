@@ -2,7 +2,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from std_msgs.msg import String, Float64MultiArray
+from std_msgs.msg import Float64MultiArray
 
 class MinimalSubscriber(Node):
     distance_1 = 0
