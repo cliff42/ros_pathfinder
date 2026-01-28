@@ -2,9 +2,10 @@
 
 import time
 import rclpy
-from rclpy.executors import ExternalShutdownException
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.action import ActionServer
+from rclpy.callback_groups import ReentrantCallbackGroup
 from action_interfaces.action import MotorControl
 from std_msgs.msg import Float64, Float64MultiArray
 import math
@@ -17,18 +18,21 @@ class MotorControlServer(Node):
     distance_r = 0
 
     MOTOR_SPEED = 0.5 # TODO: placeholder for now
+    DISTANCE_TOLERANCE = 0.01
 
     def __init__(self):
         super().__init__('controller_node')
+        self.cb_group = ReentrantCallbackGroup() # allow for concurrent callbacks
         self.left_motor_publisher = self.create_publisher(Float64, 'left_motor', 10)
         self.right_motor_publisher = self.create_publisher(Float64, 'right_motor', 10)
-        self.imu_subscription = self.create_subscription(Float64MultiArray, 'test_topic', self.imu_listener_callback, 10)
+        self.imu_subscription = self.create_subscription(Float64MultiArray, 'test_topic', self.imu_listener_callback, 10, callback_group=self.cb_group)
         self.data_lock = threading.Lock()
         self._action_server = ActionServer(
             self,
             MotorControl,
             'motor_control',
-            self.execute_callback)
+            self.execute_callback,
+            callback_group=self.cb_group)
 
 
     def execute_callback(self, goal_handle):
@@ -37,23 +41,36 @@ class MotorControlServer(Node):
         direction = goal_handle.request.plan[0]
         distance_goal = goal_handle.request.plan[1]
 
-        self.get_logger().info(f'starting distance... {starting_distance}')
-        self.get_logger().info(f'distance goal... {distance_goal}')
+        with self.data_lock:
+            start_l = self.distance_l
+            start_r = self.distance_r
 
         feedback_msg = MotorControl.Feedback()
         
-        while True:
-            with self.data_lock:
-                current_distance = self.distance_l - starting_distance
+        while rclpy.ok():
+            # catch case for cancelled request
+            if goal_handle.is_cancel_requested:
+                self.publish_to_motors(0.0, 0.0)
+                goal_handle.canceled()
+                return MotorControl.Result(success=False)
             
-            if current_distance >= distance_goal:
+            with self.data_lock:
+                dl = self.distance_l - start_l
+                dr = self.distance_r - start_r
+            
+            progress = 0.5 * (dl + dr) # TODO: avg for now but should make this more complicated later
+            remaining = max(0.0, distance_goal - progress)
+
+            if remaining <= self.DISTANCE_TOLERANCE:
                 break
                 
-            self.get_logger().info(f'here1... {current_distance}')
             self.publish_to_motors(self.MOTOR_SPEED, self.MOTOR_SPEED)
-            feedback_msg.distance_remaining = distance_goal - current_distance
+            feedback_msg.distance_remaining = remaining
             goal_handle.publish_feedback(feedback_msg)
+
             self.get_logger().info('Feedback: {0}'.format(feedback_msg.distance_remaining))
+
+            time.sleep(0.05) # TODO: update/ remove this -> should be same hz as publisher
         
         self.get_logger().info(f'here2... {self.distance_l - starting_distance }')
         # stop motors after goal distance
@@ -103,9 +120,10 @@ class ControllerNode(Node):
 def main(args=None):
     try:
         with rclpy.init(args=args):
-            planner_action_server = MotorControlServer()
-
-            rclpy.spin(planner_action_server)
+            planner_action_server = MotorControlServer() # allow for running multiple callbacks in parallel
+            executor = MultiThreadedExecutor()
+            executor.add_node(planner_action_server)
+            executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
 

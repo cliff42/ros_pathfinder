@@ -31,7 +31,7 @@ class MotorController(Node):
         self.get_logger().info('msg: "%s"' % msg.data)
 
     def listener_callback_right(self, msg):
-        speed: Float64 = msg.data
+        speed = msg.data
         if speed < 0:
             right_motor.backward(abs(speed))
         else:
