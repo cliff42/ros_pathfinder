@@ -6,13 +6,14 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from action_interfaces.action import MotorControl
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 
 class MotorControlServer(Node):
     def __init__(self):
         super().__init__('controller_node')
         self.left_motor_publisher = self.create_publisher(Float64, 'left_motor', 10)
         self.right_motor_publisher = self.create_publisher(Float64, 'right_motor', 10)
+        self.imu_subscription = self.create_subscription(Float64MultiArray, 'imu_topic', 10)
         self._action_server = ActionServer(
             self,
             MotorControl,
@@ -21,7 +22,7 @@ class MotorControlServer(Node):
 
     def execute_callback(self, goal_handle):
         self.get_logger().info(f'Executing goal... {goal_handle.request.plan}')
-        self.publish_to_motors(goal_handle.request.plan[1], goal_handle.request.plan[1])
+        self.publish_to_motors(goal_handle.request.plan[0], goal_handle.request.plan[1])
         goal_handle.succeed()
         result = MotorControl.Result()
         result.success = True

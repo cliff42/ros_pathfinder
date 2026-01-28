@@ -41,7 +41,7 @@ class EncoderPublisher(Node):
         super().__init__('imu_publisher')
         self.publisher_ = self.create_publisher(Float64MultiArray, 'test_topic', 10)
         self.publisher2_ = self.create_publisher(Float64MultiArray,'imu_topic',10)
-        self.timer_period = 0.05  # seconds
+        self.timer_period = 0.5  # seconds
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
         self.i = 0
 
