@@ -41,7 +41,7 @@ def main(args=None):
 
             action_client = MotorControlClient()
 
-            action_client.send_goal([1.0, 1.0])
+            action_client.send_goal([1.0, 10.0])
 
             rclpy.spin(action_client)
     except (KeyboardInterrupt, ExternalShutdownException):

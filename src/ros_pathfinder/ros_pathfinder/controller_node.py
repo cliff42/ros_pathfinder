@@ -7,27 +7,81 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from action_interfaces.action import MotorControl
 from std_msgs.msg import Float64, Float64MultiArray
+import math
+import threading
 
 class MotorControlServer(Node):
+    prev_angle_l = 0
+    prev_angle_r = 0
+    distance_l = 0
+    distance_r = 0
+
+    MOTOR_SPEED = 0.5 # TODO: placeholder for now
+
     def __init__(self):
         super().__init__('controller_node')
         self.left_motor_publisher = self.create_publisher(Float64, 'left_motor', 10)
         self.right_motor_publisher = self.create_publisher(Float64, 'right_motor', 10)
-        self.imu_subscription = self.create_subscription(Float64MultiArray, 'imu_topic', 10)
+        self.imu_subscription = self.create_subscription(Float64MultiArray, 'test_topic', self.imu_listener_callback, 10)
+        self.data_lock = threading.Lock()
         self._action_server = ActionServer(
             self,
             MotorControl,
             'motor_control',
             self.execute_callback)
 
+
     def execute_callback(self, goal_handle):
         self.get_logger().info(f'Executing goal... {goal_handle.request.plan}')
-        self.publish_to_motors(goal_handle.request.plan[0], goal_handle.request.plan[1])
+        starting_distance = self.distance_l # TODO: change to use combined distance
+        direction = goal_handle.request.plan[0]
+        distance_goal = goal_handle.request.plan[1]
+
+        self.get_logger().info(f'starting distance... {starting_distance}')
+        self.get_logger().info(f'distance goal... {distance_goal}')
+
+        feedback_msg = MotorControl.Feedback()
+        
+        with self.data_lock:
+            while self.distance_l - starting_distance < distance_goal :
+                self.get_logger().info(f'here1... {self.distance_l}')
+                # keep motors moving while not reached distance
+                self.publish_to_motors(self.MOTOR_SPEED, self.MOTOR_SPEED)
+                feedback_msg.distance_remaining = distance_goal - (self.distance_l - starting_distance)
+                goal_handle.publish_feedback(feedback_msg)
+                self.get_logger().info('Feedback: {0}'.format(feedback_msg.distance_remaining))
+                time.sleep(0.5)
+        
+        self.get_logger().info(f'here2... {self.distance_l - starting_distance }')
+        # stop motors after goal distance
+        self.publish_to_motors(0.0, 0.0)
         goal_handle.succeed()
         result = MotorControl.Result()
         result.success = True
         return result
     
+    def imu_listener_callback(self, msg):
+        self.get_logger().info(f"here in callback: {msg}")
+        with self.data_lock:
+            angle_l = float(msg.data[0])
+            angle_r = float(msg.data[1])
+            self.distance_l, self.prev_angle_l = self.get_distance(angle_l,self.prev_angle_l,self.distance_l)
+            self.distance_r, self.prev_angle_r = self.get_distance(angle_r,self.prev_angle_r,self.distance_r)
+        self.get_logger().info(f"distance_l: {self.distance_l}")
+
+
+    def get_distance(self,angle,prev_angle, distance):
+        delta_angle = 0
+        if prev_angle > 270 and angle < 90:
+            delta_angle = angle + 360 - prev_angle
+        elif prev_angle < 90 and angle > 270:
+            delta_angle = 360 - angle + prev_angle
+        else:
+            delta_angle = angle - prev_angle
+        distance += (delta_angle/7) * (math.pi/180)*4*0.0254
+        prev_angle = angle
+        return distance, prev_angle
+
     def publish_to_motors(self, left_speed, right_speed):
         left_msg = Float64()
         left_msg.data = left_speed
