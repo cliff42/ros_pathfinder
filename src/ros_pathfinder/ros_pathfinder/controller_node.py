@@ -42,15 +42,18 @@ class MotorControlServer(Node):
 
         feedback_msg = MotorControl.Feedback()
         
-        with self.data_lock:
-            while self.distance_l - starting_distance < distance_goal :
-                self.get_logger().info(f'here1... {self.distance_l}')
-                # keep motors moving while not reached distance
-                self.publish_to_motors(self.MOTOR_SPEED, self.MOTOR_SPEED)
-                feedback_msg.distance_remaining = distance_goal - (self.distance_l - starting_distance)
-                goal_handle.publish_feedback(feedback_msg)
-                self.get_logger().info('Feedback: {0}'.format(feedback_msg.distance_remaining))
-                time.sleep(0.5)
+        while True:
+            with self.data_lock:
+                current_distance = self.distance_l - starting_distance
+            
+            if current_distance >= distance_goal:
+                break
+                
+            self.get_logger().info(f'here1... {current_distance}')
+            self.publish_to_motors(self.MOTOR_SPEED, self.MOTOR_SPEED)
+            feedback_msg.distance_remaining = distance_goal - current_distance
+            goal_handle.publish_feedback(feedback_msg)
+            self.get_logger().info('Feedback: {0}'.format(feedback_msg.distance_remaining))
         
         self.get_logger().info(f'here2... {self.distance_l - starting_distance }')
         # stop motors after goal distance
