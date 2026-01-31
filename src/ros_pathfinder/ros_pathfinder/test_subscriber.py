@@ -51,9 +51,9 @@ class MinimalSubscriber(Node):
         self.vel_l,self.prev_distance_l = self.get_velocity(self.distance_l,self.prev_distance_l,timer_period)
         self.vel_r,self.prev_distance_r = self.get_velocity(self.distance_r,self.prev_distance_r,timer_period)
 
-        self.get_logger().info('distance (l) (m): "%s"' % self.distance_l)
+        # self.get_logger().info('distance (l) (m): "%s"' % self.distance_l)
         self.get_logger().info('velocity (l) (m/s): "%s"' % self.vel_l)
-        self.get_logger().info('distance (r) (m): "%s"' % self.distance_r)
+        # self.get_logger().info('distance (r) (m): "%s"' % self.distance_r)
         self.get_logger().info('velocity (r) (m/s): "%s"' % self.vel_r)
         
 
@@ -66,8 +66,10 @@ class MinimalSubscriber(Node):
         gyr_y = float(msg.data[4])
         gyr_z = float(msg.data[5])
         timer_period = float(msg.data[6])
-        self.get_logger().info('acc_x : "%s" m/s^2 acc_y: "%s" m/s^2 acc_z: "%s" m/s^2' % (acc_x,acc_y,acc_z))
-        self.get_logger().info('gyr_x : "%s" rad/s gyr_y: "%s" rad/s gyr_z: "%s" rad/s' % (gyr_x,gyr_y,gyr_z))
+        # self.get_logger().info('acc_x : "%s" m/s^2 acc_y: "%s" m/s^2 acc_z: "%s" m/s^2' % (acc_x,acc_y,acc_z))
+        # self.get_logger().info('gyr_x : "%s" rad/s gyr_y: "%s" rad/s gyr_z: "%s" rad/s' % (gyr_x,gyr_y,gyr_z))
+
+
         #find some way to get acc_x,acc_y,acc_z into actual acc_x,acc_y,acc_z
         # self.vel_x,self.dist_x = self.integrate(acc_x,self.vel_x,self.dist_x,timer_period)
         # self.vel_y,self.dist_y = self.integrate(acc_y,self.vel_y,self.dist_y,timer_period)
