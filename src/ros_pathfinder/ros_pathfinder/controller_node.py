@@ -70,7 +70,7 @@ class MotorControlServer(Node):
 
             self.get_logger().info('Feedback: {0}'.format(feedback_msg.distance_remaining))
 
-            time.sleep(0.05) # TODO: update/ remove this -> should be same hz as publisher
+            # time.sleep(0.05) # TODO: update/ remove this -> should be same hz as publisher
         
         self.get_logger().info(f'here2... {self.distance_l - starting_distance }')
         # stop motors after goal distance

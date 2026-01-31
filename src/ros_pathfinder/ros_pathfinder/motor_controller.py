@@ -5,7 +5,7 @@ from gpiozero import PhaseEnableMotor
 
 from std_msgs.msg import Float64
 
-left_motor = PhaseEnableMotor(20, 21)
+left_motor = PhaseEnableMotor(21, 20)
 right_motor = PhaseEnableMotor(23, 24)
 
 class MotorController(Node):
@@ -28,7 +28,7 @@ class MotorController(Node):
             left_motor.backward(abs(speed))
         else:
             left_motor.forward(abs(speed))
-        self.get_logger().info('msg: "%s"' % msg.data)
+        self.get_logger().info('left msg: "%s"' % msg.data)
 
     def listener_callback_right(self, msg):
         speed = msg.data
@@ -36,7 +36,7 @@ class MotorController(Node):
             right_motor.backward(abs(speed))
         else:
             right_motor.forward(abs(speed))
-        self.get_logger().info('msg: "%s"' % msg.data)
+        self.get_logger().info('right msg: "%s"' % msg.data)
 
 
 

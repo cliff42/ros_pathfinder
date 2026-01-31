@@ -26,7 +26,8 @@ setup(
         'console_scripts': [
             "talker = ros_pathfinder.imu_publisher:main",
             "listener = ros_pathfinder.test_subscriber:main",
-            "motor_controller = ros_pathfinder.motor_controller:main"
+            "motor_controller = ros_pathfinder.motor_controller:main",
+            "teleop_node = ros_pathfinder.teleop:main",
         ],
     },
 )
