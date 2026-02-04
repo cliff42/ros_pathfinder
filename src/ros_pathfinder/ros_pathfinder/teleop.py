@@ -20,7 +20,7 @@ MOVE_BINDINGS = {
     " ": ( 0.0,  0.0),
 }
 
-MOTOR_SPEED = 0.5
+MOTOR_SPEED = 0.2
 
 
 class TeleopNode(Node):
