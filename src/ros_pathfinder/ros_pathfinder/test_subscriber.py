@@ -1,3 +1,4 @@
+from time import sleep
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -7,6 +8,7 @@ from rclpy.node import Node
 import math
 
 from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import LaserScan
 
 class MinimalSubscriber(Node):
     
@@ -30,6 +32,7 @@ class MinimalSubscriber(Node):
         super().__init__('minimal_subscriber')
         self.subscription = self.create_subscription(Float64MultiArray,'test_topic',self.listener_callback,10)
         self.subscription2 = self.create_subscription(Float64MultiArray,'imu_topic',self.listener_callback2,10)
+        self.subscription3 = self.create_subscription(LaserScan, 'scan', self.listener_callback3, 10)
         self.subscription  # prevent unused variable warning
 
     def listener_callback(self, msg):
@@ -52,9 +55,9 @@ class MinimalSubscriber(Node):
         self.vel_r,self.prev_distance_r = self.get_velocity(self.distance_r,self.prev_distance_r,timer_period)
 
         # self.get_logger().info('distance (l) (m): "%s"' % self.distance_l)
-        self.get_logger().info('velocity (l) (m/s): "%s"' % self.vel_l)
+        # self.get_logger().info('velocity (l) (m/s): "%s"' % self.vel_l)
         # self.get_logger().info('distance (r) (m): "%s"' % self.distance_r)
-        self.get_logger().info('velocity (r) (m/s): "%s"' % self.vel_r)
+        # self.get_logger().info('velocity (r) (m/s): "%s"' % self.vel_r)
         
 
         self.count += 1
@@ -74,6 +77,10 @@ class MinimalSubscriber(Node):
         # self.vel_x,self.dist_x = self.integrate(acc_x,self.vel_x,self.dist_x,timer_period)
         # self.vel_y,self.dist_y = self.integrate(acc_y,self.vel_y,self.dist_y,timer_period)
         # self.vel_z,self.dist_z = self.integrate(acc_z,self.vel_z,self.dist_z,timer_period)
+
+    def listener_callback3(self,msg):
+        sleep(5)
+        self.get_logger().info('lidar msg: %s' % msg)
 
 
     def get_distance(self,angle,prev_angle, distance):
