@@ -5,7 +5,7 @@ from gpiozero import PhaseEnableMotor
 
 from std_msgs.msg import Float64
 
-left_motor = PhaseEnableMotor(21, 20)
+left_motor = PhaseEnableMotor(20, 21)
 right_motor = PhaseEnableMotor(23, 24)
 
 class MotorController(Node):
