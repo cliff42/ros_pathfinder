@@ -28,6 +28,7 @@ setup(
             "listener = ros_pathfinder.test_subscriber:main",
             "motor_controller = ros_pathfinder.motor_controller:main",
             "teleop_node = ros_pathfinder.teleop:main",
+            "odom_node = ros_pathfinder.odometry_publisher:main",
         ],
     },
 )
