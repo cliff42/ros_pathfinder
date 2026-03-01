@@ -56,8 +56,8 @@ class OdometryPublisher(Node):
         tf.header.frame_id = HEADER_FRAME
         tf.child_frame_id = CHILD_FRAME
 
-        angle_l = self.get_raw_angle(bus1)
-        angle_r = self.get_raw_angle(bus2)
+        angle_l = self.get_raw_angle(bus2)
+        angle_r = self.get_raw_angle(bus1)
 
         if self.init_angle:
             self.prev_angle_l = angle_l
@@ -66,10 +66,12 @@ class OdometryPublisher(Node):
 
         self.distance_l, self.prev_angle_l = self.get_distance(angle_l, self.prev_angle_l, self.distance_l)
         self.distance_r, self.prev_angle_r = self.get_distance(angle_r, self.prev_angle_r, self.distance_r)
-        # self.distance_r = -1*self.distance_r
 
         self.vel_l, self.prev_distance_l = self.get_velocity(self.distance_l, self.prev_distance_l, self.timer_period)
         self.vel_r, self.prev_distance_r = self.get_velocity(self.distance_r, self.prev_distance_r, self.timer_period)
+
+        # wheel is backwards
+        self.vel_l = -1*self.vel_l
 
         x_dot = ((self.vel_r + self.vel_l) / 2) * math.cos(self.theta)
         self.x = self.x + x_dot * self.timer_period
