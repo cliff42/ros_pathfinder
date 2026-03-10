@@ -1,0 +1,441 @@
+[0.000000] (-) TimerEvent: {}
+[0.001051] (action_interfaces) JobQueued: {'identifier': 'action_interfaces', 'dependencies': OrderedDict()}
+[0.002212] (sllidar_ros2) JobQueued: {'identifier': 'sllidar_ros2', 'dependencies': OrderedDict()}
+[0.002669] (ros_pathfinder) JobQueued: {'identifier': 'ros_pathfinder', 'dependencies': OrderedDict({'action_interfaces': '/home/pirobot/git/ros_pathfinder/install/action_interfaces'})}
+[0.002884] (action_interfaces) JobStarted: {'identifier': 'action_interfaces'}
+[0.020441] (sllidar_ros2) JobStarted: {'identifier': 'sllidar_ros2'}
+[0.037149] (action_interfaces) JobProgress: {'identifier': 'action_interfaces', 'progress': 'cmake'}
+[0.041686] (action_interfaces) JobProgress: {'identifier': 'action_interfaces', 'progress': 'build'}
+[0.046392] (action_interfaces) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/pirobot/git/ros_pathfinder/build/action_interfaces', '--', '-j4', '-l4'], 'cwd': '/home/pirobot/git/ros_pathfinder/build/action_interfaces', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'pirobot', 'XDG_SESSION_TYPE': 'wayland', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib:/opt/ros/kilted/opt/zenoh_cpp_vendor/lib:/opt/ros/kilted/opt/gz_math_vendor/lib:/opt/ros/kilted/opt/gz_utils_vendor/lib:/opt/ros/kilted/opt/rviz_ogre_vendor/lib:/opt/ros/kilted/lib/aarch64-linux-gnu:/opt/ros/kilted/opt/gz_cmake_vendor/lib:/opt/ros/kilted/lib', 'HOME': '/home/pirobot', 'DESKTOP_SESSION': 'ubuntu', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'SYSTEMD_EXEC_PID': '2606', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install:/home/pirobot/ros2_ws/install', 'ROS_DISTRO': 'kilted', 'LOGNAME': 'pirobot', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'pirobot', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'PATH': '/opt/ros/kilted/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin', 'SESSION_MANAGER': 'local/pirobot-desktop:@/tmp/.ICE-unix/2577,unix/pirobot-desktop:/tmp/.ICE-unix/2577', 'XDG_MENU_PREFIX': 'gnome-', 'GNOME_TERMINAL_SCREEN': '/org/gnome/Terminal/screen/1a8a25c6_6308_45f0_b3ff_5d639d1d4ecd', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'DISPLAY': ':0', 'LANG': 'C.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.YMBYL3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'GNOME_TERMINAL_SERVICE': ':1.111', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'AMENT_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/pirobot/git/ros_pathfinder/build/action_interfaces', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages:/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages:/home/pirobot/ros2_ws/install/my_robot_controller/lib/python3.12/site-packages:/opt/ros/kilted/lib/python3.12/site-packages', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'VTE_VERSION': '7600', 'CMAKE_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/opt/ros/kilted/opt/gz_math_vendor:/opt/ros/kilted/opt/gz_utils_vendor:/opt/ros/kilted/opt/gz_cmake_vendor:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted'}), 'shell': False}
+[0.051117] (sllidar_ros2) JobProgress: {'identifier': 'sllidar_ros2', 'progress': 'cmake'}
+[0.054146] (sllidar_ros2) JobProgress: {'identifier': 'sllidar_ros2', 'progress': 'build'}
+[0.054295] (sllidar_ros2) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/pirobot/git/ros_pathfinder/build/sllidar_ros2', '--', '-j4', '-l4'], 'cwd': '/home/pirobot/git/ros_pathfinder/build/sllidar_ros2', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'pirobot', 'XDG_SESSION_TYPE': 'wayland', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib:/opt/ros/kilted/opt/zenoh_cpp_vendor/lib:/opt/ros/kilted/opt/gz_math_vendor/lib:/opt/ros/kilted/opt/gz_utils_vendor/lib:/opt/ros/kilted/opt/rviz_ogre_vendor/lib:/opt/ros/kilted/lib/aarch64-linux-gnu:/opt/ros/kilted/opt/gz_cmake_vendor/lib:/opt/ros/kilted/lib', 'HOME': '/home/pirobot', 'DESKTOP_SESSION': 'ubuntu', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'SYSTEMD_EXEC_PID': '2606', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install:/home/pirobot/ros2_ws/install', 'ROS_DISTRO': 'kilted', 'LOGNAME': 'pirobot', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'pirobot', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'PATH': '/opt/ros/kilted/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin', 'SESSION_MANAGER': 'local/pirobot-desktop:@/tmp/.ICE-unix/2577,unix/pirobot-desktop:/tmp/.ICE-unix/2577', 'XDG_MENU_PREFIX': 'gnome-', 'GNOME_TERMINAL_SCREEN': '/org/gnome/Terminal/screen/1a8a25c6_6308_45f0_b3ff_5d639d1d4ecd', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'DISPLAY': ':0', 'LANG': 'C.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.YMBYL3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'GNOME_TERMINAL_SERVICE': ':1.111', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'AMENT_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/pirobot/git/ros_pathfinder/build/sllidar_ros2', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages:/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages:/home/pirobot/ros2_ws/install/my_robot_controller/lib/python3.12/site-packages:/opt/ros/kilted/lib/python3.12/site-packages', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'VTE_VERSION': '7600', 'CMAKE_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/opt/ros/kilted/opt/gz_math_vendor:/opt/ros/kilted/opt/gz_utils_vendor:/opt/ros/kilted/opt/gz_cmake_vendor:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted'}), 'shell': False}
+[0.103463] (-) TimerEvent: {}
+[0.192710] (action_interfaces) StdoutLine: {'line': b'[  2%] Built target action_interfaces__rosidl_generator_type_description\n'}
+[0.203602] (-) TimerEvent: {}
+[0.251388] (sllidar_ros2) StdoutLine: {'line': b'[ 10%] Built target sllidar_client\n'}
+[0.272546] (sllidar_ros2) StdoutLine: {'line': b'[100%] Built target sllidar_node\n'}
+[0.276472] (action_interfaces) StdoutLine: {'line': b'[  2%] Built target ament_cmake_python_copy_action_interfaces\n'}
+[0.291724] (action_interfaces) StdoutLine: {'line': b'[  5%] Built target action_interfaces__cpp\n'}
+[0.304594] (-) TimerEvent: {}
+[0.313264] (action_interfaces) StdoutLine: {'line': b'[ 20%] Built target action_interfaces__rosidl_generator_c\n'}
+[0.340753] (sllidar_ros2) CommandEnded: {'returncode': 0}
+[0.341982] (sllidar_ros2) JobProgress: {'identifier': 'sllidar_ros2', 'progress': 'install'}
+[0.410474] (-) TimerEvent: {}
+[0.428625] (sllidar_ros2) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/pirobot/git/ros_pathfinder/build/sllidar_ros2'], 'cwd': '/home/pirobot/git/ros_pathfinder/build/sllidar_ros2', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'pirobot', 'XDG_SESSION_TYPE': 'wayland', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib:/opt/ros/kilted/opt/zenoh_cpp_vendor/lib:/opt/ros/kilted/opt/gz_math_vendor/lib:/opt/ros/kilted/opt/gz_utils_vendor/lib:/opt/ros/kilted/opt/rviz_ogre_vendor/lib:/opt/ros/kilted/lib/aarch64-linux-gnu:/opt/ros/kilted/opt/gz_cmake_vendor/lib:/opt/ros/kilted/lib', 'HOME': '/home/pirobot', 'DESKTOP_SESSION': 'ubuntu', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'SYSTEMD_EXEC_PID': '2606', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install:/home/pirobot/ros2_ws/install', 'ROS_DISTRO': 'kilted', 'LOGNAME': 'pirobot', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'pirobot', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'PATH': '/opt/ros/kilted/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin', 'SESSION_MANAGER': 'local/pirobot-desktop:@/tmp/.ICE-unix/2577,unix/pirobot-desktop:/tmp/.ICE-unix/2577', 'XDG_MENU_PREFIX': 'gnome-', 'GNOME_TERMINAL_SCREEN': '/org/gnome/Terminal/screen/1a8a25c6_6308_45f0_b3ff_5d639d1d4ecd', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'DISPLAY': ':0', 'LANG': 'C.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.YMBYL3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'GNOME_TERMINAL_SERVICE': ':1.111', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'AMENT_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/pirobot/git/ros_pathfinder/build/sllidar_ros2', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages:/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages:/home/pirobot/ros2_ws/install/my_robot_controller/lib/python3.12/site-packages:/opt/ros/kilted/lib/python3.12/site-packages', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'VTE_VERSION': '7600', 'CMAKE_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/opt/ros/kilted/opt/gz_math_vendor:/opt/ros/kilted/opt/gz_utils_vendor:/opt/ros/kilted/opt/gz_cmake_vendor:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted'}), 'shell': False}
+[0.441674] (action_interfaces) StdoutLine: {'line': b'[ 29%] Built target action_interfaces__rosidl_typesupport_fastrtps_cpp\n'}
+[0.459096] (action_interfaces) StdoutLine: {'line': b'[ 38%] Built target action_interfaces__rosidl_typesupport_introspection_cpp\n'}
+[0.486197] (action_interfaces) StdoutLine: {'line': b'[ 47%] Built target action_interfaces__rosidl_typesupport_cpp\n'}
+[0.488483] (sllidar_ros2) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[0.488867] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch\n'}
+[0.492819] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_a2m8_launch.py\n'}
+[0.492993] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_s2e_launch.py\n'}
+[0.493127] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_s3_launch.py\n'}
+[0.493248] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_s2_launch.py\n'}
+[0.493366] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_a2m7_launch.py\n'}
+[0.493591] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_a3_launch.py\n'}
+[0.493863] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_a2m7_launch.py\n'}
+[0.494033] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_a3_launch.py\n'}
+[0.494219] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_s2e_launch.py\n'}
+[0.494363] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_a1_launch.py\n'}
+[0.505108] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_a2m12_launch.py\n'}
+[0.505253] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_s3_launch.py\n'}
+[0.505400] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_a2m8_launch.py\n'}
+[0.505549] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_a2m12_launch .py\n'}
+[0.505673] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_c1_launch.py\n'}
+[0.505786] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_s1_launch.py\n'}
+[0.505913] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_c1_launch.py\n'}
+[0.506053] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_s1_launch.py\n'}
+[0.506172] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_t1_launch.py\n'}
+[0.506276] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_s1_tcp_launch.py\n'}
+[0.506399] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/sllidar_s2_launch.py\n'}
+[0.506582] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_t1_launch.py\n'}
+[0.506803] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_s1_tcp_launch.py\n'}
+[0.506980] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/launch/view_sllidar_a1_launch.py\n'}
+[0.507148] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/rviz\n'}
+[0.507289] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/rviz/sllidar_ros2.rviz\n'}
+[0.515700] (-) TimerEvent: {}
+[0.515906] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/lib/sllidar_ros2/sllidar_node\n'}
+[0.525417] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/lib/sllidar_ros2/sllidar_client\n'}
+[0.525805] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/ament_index/resource_index/package_run_dependencies/sllidar_ros2\n'}
+[0.526147] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/ament_index/resource_index/parent_prefix_path/sllidar_ros2\n'}
+[0.526985] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/environment/ament_prefix_path.sh\n'}
+[0.531777] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/environment/ament_prefix_path.dsv\n'}
+[0.532007] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/environment/path.sh\n'}
+[0.532142] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/environment/path.dsv\n'}
+[0.532292] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/local_setup.bash\n'}
+[0.532446] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/local_setup.sh\n'}
+[0.532592] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/local_setup.zsh\n'}
+[0.532702] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/local_setup.dsv\n'}
+[0.532799] (sllidar_ros2) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/package.dsv\n'}
+[0.532896] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/ament_index/resource_index/packages/sllidar_ros2\n'}
+[0.532995] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/cmake/ament_cmake_export_dependencies-extras.cmake\n'}
+[0.533097] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/cmake/ament_cmake_export_include_directories-extras.cmake\n'}
+[0.533195] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/cmake/sllidar_ros2Config.cmake\n'}
+[0.533303] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/cmake/sllidar_ros2Config-version.cmake\n'}
+[0.533434] (sllidar_ros2) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/sllidar_ros2/share/sllidar_ros2/package.xml\n'}
+[0.533554] (sllidar_ros2) CommandEnded: {'returncode': 0}
+[0.609685] (action_interfaces) StdoutLine: {'line': b'[ 55%] Built target action_interfaces__rosidl_typesupport_introspection_c\n'}
+[0.618967] (-) TimerEvent: {}
+[0.624283] (action_interfaces) StdoutLine: {'line': b'[ 64%] Built target action_interfaces__rosidl_typesupport_fastrtps_c\n'}
+[0.698909] (sllidar_ros2) JobEnded: {'identifier': 'sllidar_ros2', 'rc': 0}
+[0.714208] (action_interfaces) StdoutLine: {'line': b'[ 73%] Built target action_interfaces__rosidl_typesupport_c\n'}
+[0.724694] (-) TimerEvent: {}
+[0.828833] (-) TimerEvent: {}
+[0.910672] (action_interfaces) StdoutLine: {'line': b'[ 73%] Built target action_interfaces\n'}
+[0.932521] (-) TimerEvent: {}
+[1.033203] (-) TimerEvent: {}
+[1.134278] (-) TimerEvent: {}
+[1.147282] (action_interfaces) StdoutLine: {'line': b'[ 76%] Built target action_interfaces__py\n'}
+[1.237475] (-) TimerEvent: {}
+[1.327113] (action_interfaces) StdoutLine: {'line': b'[ 82%] Built target action_interfaces__rosidl_generator_py\n'}
+[1.337593] (-) TimerEvent: {}
+[1.442004] (-) TimerEvent: {}
+[1.486136] (action_interfaces) StdoutLine: {'line': b'[ 88%] Built target action_interfaces_s__rosidl_typesupport_fastrtps_c\n'}
+[1.499750] (action_interfaces) StdoutLine: {'line': b'[ 94%] Built target action_interfaces_s__rosidl_typesupport_c\n'}
+[1.503838] (action_interfaces) StdoutLine: {'line': b'[100%] Built target action_interfaces_s__rosidl_typesupport_introspection_c\n'}
+[1.542118] (-) TimerEvent: {}
+[1.642570] (-) TimerEvent: {}
+[1.667404] (action_interfaces) StdoutLine: {'line': b'running egg_info\n'}
+[1.716719] (action_interfaces) StdoutLine: {'line': b'writing action_interfaces.egg-info/PKG-INFO\n'}
+[1.717045] (action_interfaces) StdoutLine: {'line': b'writing dependency_links to action_interfaces.egg-info/dependency_links.txt\n'}
+[1.717294] (action_interfaces) StdoutLine: {'line': b'writing top-level names to action_interfaces.egg-info/top_level.txt\n'}
+[1.743146] (-) TimerEvent: {}
+[1.829708] (action_interfaces) StdoutLine: {'line': b"reading manifest file 'action_interfaces.egg-info/SOURCES.txt'\n"}
+[1.832108] (action_interfaces) StdoutLine: {'line': b"writing manifest file 'action_interfaces.egg-info/SOURCES.txt'\n"}
+[1.843314] (-) TimerEvent: {}
+[1.943879] (-) TimerEvent: {}
+[1.959316] (action_interfaces) StdoutLine: {'line': b'[100%] Built target ament_cmake_python_build_action_interfaces_egg\n'}
+[1.999102] (action_interfaces) CommandEnded: {'returncode': 0}
+[2.000596] (action_interfaces) JobProgress: {'identifier': 'action_interfaces', 'progress': 'install'}
+[2.000666] (action_interfaces) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/pirobot/git/ros_pathfinder/build/action_interfaces'], 'cwd': '/home/pirobot/git/ros_pathfinder/build/action_interfaces', 'env': OrderedDict({'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'pirobot', 'XDG_SESSION_TYPE': 'wayland', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib:/opt/ros/kilted/opt/zenoh_cpp_vendor/lib:/opt/ros/kilted/opt/gz_math_vendor/lib:/opt/ros/kilted/opt/gz_utils_vendor/lib:/opt/ros/kilted/opt/rviz_ogre_vendor/lib:/opt/ros/kilted/lib/aarch64-linux-gnu:/opt/ros/kilted/opt/gz_cmake_vendor/lib:/opt/ros/kilted/lib', 'HOME': '/home/pirobot', 'DESKTOP_SESSION': 'ubuntu', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'SYSTEMD_EXEC_PID': '2606', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install:/home/pirobot/ros2_ws/install', 'ROS_DISTRO': 'kilted', 'LOGNAME': 'pirobot', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'pirobot', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'PATH': '/opt/ros/kilted/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin', 'SESSION_MANAGER': 'local/pirobot-desktop:@/tmp/.ICE-unix/2577,unix/pirobot-desktop:/tmp/.ICE-unix/2577', 'XDG_MENU_PREFIX': 'gnome-', 'GNOME_TERMINAL_SCREEN': '/org/gnome/Terminal/screen/1a8a25c6_6308_45f0_b3ff_5d639d1d4ecd', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'DISPLAY': ':0', 'LANG': 'C.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.YMBYL3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'GNOME_TERMINAL_SERVICE': ':1.111', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'AMENT_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/pirobot/git/ros_pathfinder/build/action_interfaces', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages:/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages:/home/pirobot/ros2_ws/install/my_robot_controller/lib/python3.12/site-packages:/opt/ros/kilted/lib/python3.12/site-packages', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'VTE_VERSION': '7600', 'CMAKE_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/opt/ros/kilted/opt/gz_math_vendor:/opt/ros/kilted/opt/gz_utils_vendor:/opt/ros/kilted/opt/gz_cmake_vendor:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted'}), 'shell': False}
+[2.020691] (action_interfaces) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[2.022481] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/ament_index/resource_index/rosidl_interfaces/action_interfaces\n'}
+[2.027837] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/action/MotorControl.json\n'}
+[2.028084] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces\n'}
+[2.028536] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action\n'}
+[2.029002] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/motor_control.h\n'}
+[2.029168] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail\n'}
+[2.029318] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__type_support.h\n'}
+[2.029503] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__functions.h\n'}
+[2.029650] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__struct.h\n'}
+[2.029837] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__type_support.c\n'}
+[2.029982] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__functions.c\n'}
+[2.030132] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__description.c\n'}
+[2.030283] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg\n'}
+[2.032432] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg/rosidl_generator_c__visibility_control.h\n'}
+[2.032732] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/library_path.sh\n'}
+[2.032934] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/library_path.dsv\n'}
+[2.033114] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_generator_c.so\n'}
+[2.033279] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces\n'}
+[2.038427] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action\n'}
+[2.038632] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail\n'}
+[2.038831] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__rosidl_typesupport_fastrtps_c.h\n'}
+[2.038960] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg\n'}
+[2.039075] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg/rosidl_typesupport_fastrtps_c__visibility_control.h\n'}
+[2.039188] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_typesupport_fastrtps_c.so\n'}
+[2.039301] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces\n'}
+[2.039440] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action\n'}
+[2.039560] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail\n'}
+[2.039668] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__type_support.c\n'}
+[2.039777] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__rosidl_typesupport_introspection_c.h\n'}
+[2.039916] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg\n'}
+[2.040025] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg/rosidl_typesupport_introspection_c__visibility_control.h\n'}
+[2.040127] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_typesupport_introspection_c.so\n'}
+[2.040229] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_typesupport_c.so\n'}
+[2.040329] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces\n'}
+[2.043813] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action\n'}
+[2.043991] (-) TimerEvent: {}
+[2.044182] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/motor_control.hpp\n'}
+[2.044340] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail\n'}
+[2.044551] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__struct.hpp\n'}
+[2.044699] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__type_support.hpp\n'}
+[2.044840] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__builder.hpp\n'}
+[2.044972] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__traits.hpp\n'}
+[2.045094] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg\n'}
+[2.045209] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg/rosidl_generator_cpp__visibility_control.hpp\n'}
+[2.045324] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces\n'}
+[2.045481] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action\n'}
+[2.051486] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail\n'}
+[2.051787] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__rosidl_typesupport_fastrtps_cpp.hpp\n'}
+[2.051913] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/dds_fastrtps\n'}
+[2.052074] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg\n'}
+[2.052186] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/msg/rosidl_typesupport_fastrtps_cpp__visibility_control.h\n'}
+[2.052315] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_typesupport_fastrtps_cpp.so\n'}
+[2.053321] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces\n'}
+[2.053494] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action\n'}
+[2.053611] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail\n'}
+[2.053713] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__type_support.cpp\n'}
+[2.053820] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/include/action_interfaces/action_interfaces/action/detail/motor_control__rosidl_typesupport_introspection_cpp.hpp\n'}
+[2.053931] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_typesupport_introspection_cpp.so\n'}
+[2.054035] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_typesupport_cpp.so\n'}
+[2.054140] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/pythonpath.sh\n'}
+[2.054237] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/pythonpath.dsv\n'}
+[2.054331] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces-0.0.0-py3.12.egg-info\n'}
+[2.058115] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces-0.0.0-py3.12.egg-info/dependency_links.txt\n'}
+[2.060809] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces-0.0.0-py3.12.egg-info/top_level.txt\n'}
+[2.061107] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces-0.0.0-py3.12.egg-info/SOURCES.txt\n'}
+[2.061240] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces-0.0.0-py3.12.egg-info/PKG-INFO\n'}
+[2.061360] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces\n'}
+[2.063164] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action_interfaces_s__rosidl_typesupport_fastrtps_c.so\n'}
+[2.064083] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/_action_interfaces_s.ep.rosidl_typesupport_fastrtps_c.c\n'}
+[2.064447] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action_interfaces_s__rosidl_typesupport_c.so\n'}
+[2.064647] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/_action_interfaces_s.ep.rosidl_typesupport_c.c\n'}
+[2.068077] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action_interfaces_s__rosidl_typesupport_introspection_c.so\n'}
+[2.068250] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action\n'}
+[2.068393] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action/_motor_control_s.c\n'}
+[2.068569] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action/_motor_control.py\n'}
+[2.068731] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action/__init__.py\n'}
+[2.068978] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/__init__.py\n'}
+[2.069512] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/_action_interfaces_s.ep.rosidl_typesupport_introspection_c.c\n'}
+[2.139724] (action_interfaces) StdoutLine: {'line': b"Listing '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces'...\n"}
+[2.140128] (action_interfaces) StdoutLine: {'line': b"Listing '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action'...\n"}
+[2.144138] (-) TimerEvent: {}
+[2.172003] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action_interfaces_s__rosidl_typesupport_fastrtps_c.so\n'}
+[2.172801] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action_interfaces_s__rosidl_typesupport_introspection_c.so\n'}
+[2.174705] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages/action_interfaces/action_interfaces_s__rosidl_typesupport_c.so\n'}
+[2.179199] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/libaction_interfaces__rosidl_generator_py.so\n'}
+[2.179750] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/action/MotorControl.idl\n'}
+[2.180391] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/action/MotorControl.action\n'}
+[2.180681] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/ament_index/resource_index/package_run_dependencies/action_interfaces\n'}
+[2.180909] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/ament_index/resource_index/parent_prefix_path/action_interfaces\n'}
+[2.181216] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/ament_prefix_path.sh\n'}
+[2.181418] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/ament_prefix_path.dsv\n'}
+[2.202205] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/path.sh\n'}
+[2.202470] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/environment/path.dsv\n'}
+[2.202654] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/local_setup.bash\n'}
+[2.202806] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/local_setup.sh\n'}
+[2.202954] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/local_setup.zsh\n'}
+[2.203097] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/local_setup.dsv\n'}
+[2.203233] (action_interfaces) StdoutLine: {'line': b'-- Installing: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/package.dsv\n'}
+[2.209281] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/ament_index/resource_index/packages/action_interfaces\n'}
+[2.218282] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_generator_cExport.cmake\n'}
+[2.218762] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_generator_cExport-noconfig.cmake\n'}
+[2.224535] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_typesupport_fastrtps_cExport.cmake\n'}
+[2.225182] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_typesupport_fastrtps_cExport-noconfig.cmake\n'}
+[2.233609] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_introspection_cExport.cmake\n'}
+[2.234060] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_introspection_cExport-noconfig.cmake\n'}
+[2.234365] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_cExport.cmake\n'}
+[2.234748] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_cExport-noconfig.cmake\n'}
+[2.235135] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_generator_cppExport.cmake\n'}
+[2.242018] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_typesupport_fastrtps_cppExport.cmake\n'}
+[2.248200] (-) TimerEvent: {}
+[2.248553] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_typesupport_fastrtps_cppExport-noconfig.cmake\n'}
+[2.248964] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_introspection_cppExport.cmake\n'}
+[2.249275] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_introspection_cppExport-noconfig.cmake\n'}
+[2.249586] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_cppExport.cmake\n'}
+[2.249849] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfaces__rosidl_typesupport_cppExport-noconfig.cmake\n'}
+[2.250120] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_generator_pyExport.cmake\n'}
+[2.269763] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/export_action_interfaces__rosidl_generator_pyExport-noconfig.cmake\n'}
+[2.270038] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/rosidl_cmake-extras.cmake\n'}
+[2.270362] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/ament_cmake_export_dependencies-extras.cmake\n'}
+[2.270717] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/ament_cmake_export_include_directories-extras.cmake\n'}
+[2.270913] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/ament_cmake_export_libraries-extras.cmake\n'}
+[2.271087] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/ament_cmake_export_targets-extras.cmake\n'}
+[2.271257] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/rosidl_cmake_export_typesupport_targets-extras.cmake\n'}
+[2.271476] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/rosidl_cmake_export_typesupport_libraries-extras.cmake\n'}
+[2.271739] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfacesConfig.cmake\n'}
+[2.271936] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/cmake/action_interfacesConfig-version.cmake\n'}
+[2.272118] (action_interfaces) StdoutLine: {'line': b'-- Up-to-date: /home/pirobot/git/ros_pathfinder/install/action_interfaces/share/action_interfaces/package.xml\n'}
+[2.272315] (action_interfaces) CommandEnded: {'returncode': 0}
+[2.348750] (-) TimerEvent: {}
+[2.416460] (action_interfaces) JobEnded: {'identifier': 'action_interfaces', 'rc': 0}
+[2.425800] (ros_pathfinder) JobStarted: {'identifier': 'ros_pathfinder'}
+[2.451864] (-) TimerEvent: {}
+[2.559264] (-) TimerEvent: {}
+[2.660695] (-) TimerEvent: {}
+[2.765154] (-) TimerEvent: {}
+[2.866081] (-) TimerEvent: {}
+[2.969000] (-) TimerEvent: {}
+[3.073478] (-) TimerEvent: {}
+[3.174057] (-) TimerEvent: {}
+[3.277056] (-) TimerEvent: {}
+[3.379017] (-) TimerEvent: {}
+[3.482615] (-) TimerEvent: {}
+[3.589641] (-) TimerEvent: {}
+[3.691606] (-) TimerEvent: {}
+[3.796924] (-) TimerEvent: {}
+[3.900492] (-) TimerEvent: {}
+[4.002865] (-) TimerEvent: {}
+[4.103988] (-) TimerEvent: {}
+[4.205967] (-) TimerEvent: {}
+[4.310761] (-) TimerEvent: {}
+[4.414779] (-) TimerEvent: {}
+[4.515542] (-) TimerEvent: {}
+[4.617522] (-) TimerEvent: {}
+[4.718931] (-) TimerEvent: {}
+[4.821609] (-) TimerEvent: {}
+[4.937847] (-) TimerEvent: {}
+[5.044251] (-) TimerEvent: {}
+[5.145390] (-) TimerEvent: {}
+[5.246404] (-) TimerEvent: {}
+[5.348103] (-) TimerEvent: {}
+[5.452832] (-) TimerEvent: {}
+[5.557655] (-) TimerEvent: {}
+[5.663487] (-) TimerEvent: {}
+[5.764024] (-) TimerEvent: {}
+[5.866513] (-) TimerEvent: {}
+[5.967205] (-) TimerEvent: {}
+[6.075166] (-) TimerEvent: {}
+[6.175765] (-) TimerEvent: {}
+[6.277069] (-) TimerEvent: {}
+[6.380152] (-) TimerEvent: {}
+[6.483042] (-) TimerEvent: {}
+[6.583770] (-) TimerEvent: {}
+[6.686549] (-) TimerEvent: {}
+[6.789966] (-) TimerEvent: {}
+[6.890615] (-) TimerEvent: {}
+[7.002473] (-) TimerEvent: {}
+[7.105486] (-) TimerEvent: {}
+[7.208837] (-) TimerEvent: {}
+[7.322555] (-) TimerEvent: {}
+[7.429911] (-) TimerEvent: {}
+[7.530506] (-) TimerEvent: {}
+[7.639619] (-) TimerEvent: {}
+[7.740314] (-) TimerEvent: {}
+[7.848600] (-) TimerEvent: {}
+[7.949447] (-) TimerEvent: {}
+[8.060925] (-) TimerEvent: {}
+[8.168748] (-) TimerEvent: {}
+[8.275508] (-) TimerEvent: {}
+[8.379514] (-) TimerEvent: {}
+[8.480148] (-) TimerEvent: {}
+[8.582502] (-) TimerEvent: {}
+[8.689352] (-) TimerEvent: {}
+[8.801313] (-) TimerEvent: {}
+[8.902267] (-) TimerEvent: {}
+[9.009256] (-) TimerEvent: {}
+[9.109835] (-) TimerEvent: {}
+[9.213847] (-) TimerEvent: {}
+[9.317152] (-) TimerEvent: {}
+[9.425523] (-) TimerEvent: {}
+[9.552575] (-) TimerEvent: {}
+[9.654537] (-) TimerEvent: {}
+[9.756308] (-) TimerEvent: {}
+[9.861757] (-) TimerEvent: {}
+[9.969510] (-) TimerEvent: {}
+[10.076850] (-) TimerEvent: {}
+[10.182586] (-) TimerEvent: {}
+[10.284258] (-) TimerEvent: {}
+[10.393556] (-) TimerEvent: {}
+[10.499409] (-) TimerEvent: {}
+[10.600693] (-) TimerEvent: {}
+[10.702871] (-) TimerEvent: {}
+[10.810149] (-) TimerEvent: {}
+[10.910791] (-) TimerEvent: {}
+[11.016277] (-) TimerEvent: {}
+[11.120731] (-) TimerEvent: {}
+[11.222518] (-) TimerEvent: {}
+[11.296845] (ros_pathfinder) Command: {'cmd': ['/usr/bin/python3', '-W', 'ignore:setup.py install is deprecated', '-W', 'ignore:easy_install command is deprecated', 'setup.py', 'egg_info', '--egg-base', '../../build/ros_pathfinder', 'build', '--build-base', '/home/pirobot/git/ros_pathfinder/build/ros_pathfinder/build', 'install', '--record', '/home/pirobot/git/ros_pathfinder/build/ros_pathfinder/install.log', '--single-version-externally-managed', 'install_data'], 'cwd': '/home/pirobot/git/ros_pathfinder/src/ros_pathfinder', 'env': {'LESSOPEN': '| /usr/bin/lesspipe %s', 'USER': 'pirobot', 'XDG_SESSION_TYPE': 'wayland', 'CLUTTER_DISABLE_MIPMAPPED_TEXT': '1', 'SHLVL': '1', 'LD_LIBRARY_PATH': '/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib:/opt/ros/kilted/opt/zenoh_cpp_vendor/lib:/opt/ros/kilted/opt/gz_math_vendor/lib:/opt/ros/kilted/opt/gz_utils_vendor/lib:/opt/ros/kilted/opt/rviz_ogre_vendor/lib:/opt/ros/kilted/lib/aarch64-linux-gnu:/opt/ros/kilted/opt/gz_cmake_vendor/lib:/opt/ros/kilted/lib', 'HOME': '/home/pirobot', 'DESKTOP_SESSION': 'ubuntu', 'ROS_PYTHON_VERSION': '3', 'GNOME_SHELL_SESSION_MODE': 'ubuntu', 'GTK_MODULES': 'gail:atk-bridge', 'SYSTEMD_EXEC_PID': '2606', 'GSM_SKIP_SSH_AGENT_WORKAROUND': 'true', 'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus', 'COLORTERM': 'truecolor', 'DEBUGINFOD_URLS': 'https://debuginfod.ubuntu.com', 'IM_CONFIG_PHASE': '1', 'WAYLAND_DISPLAY': 'wayland-0', 'COLCON_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install:/home/pirobot/ros2_ws/install', 'ROS_DISTRO': 'kilted', 'LOGNAME': 'pirobot', '_': '/usr/bin/colcon', 'ROS_VERSION': '2', 'MEMORY_PRESSURE_WATCH': '/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/org.gnome.Shell@wayland.service/memory.pressure', 'XDG_SESSION_CLASS': 'user', 'USERNAME': 'pirobot', 'TERM': 'xterm-256color', 'GNOME_DESKTOP_SESSION_ID': 'this-is-deprecated', 'PATH': '/opt/ros/kilted/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin', 'SESSION_MANAGER': 'local/pirobot-desktop:@/tmp/.ICE-unix/2577,unix/pirobot-desktop:/tmp/.ICE-unix/2577', 'XDG_MENU_PREFIX': 'gnome-', 'GNOME_TERMINAL_SCREEN': '/org/gnome/Terminal/screen/1a8a25c6_6308_45f0_b3ff_5d639d1d4ecd', 'GNOME_SETUP_DISPLAY': ':1', 'XDG_RUNTIME_DIR': '/run/user/1000', 'DISPLAY': ':0', 'LANG': 'C.UTF-8', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'XMODIFIERS': '@im=ibus', 'XDG_SESSION_DESKTOP': 'ubuntu', 'XAUTHORITY': '/run/user/1000/.mutter-Xwaylandauth.YMBYL3', 'LS_COLORS': 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.avif=01;35:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:*~=00;90:*#=00;90:*.bak=00;90:*.crdownload=00;90:*.dpkg-dist=00;90:*.dpkg-new=00;90:*.dpkg-old=00;90:*.dpkg-tmp=00;90:*.old=00;90:*.orig=00;90:*.part=00;90:*.rej=00;90:*.rpmnew=00;90:*.rpmorig=00;90:*.rpmsave=00;90:*.swp=00;90:*.tmp=00;90:*.ucf-dist=00;90:*.ucf-new=00;90:*.ucf-old=00;90:', 'GNOME_TERMINAL_SERVICE': ':1.111', 'SSH_AUTH_SOCK': '/run/user/1000/keyring/ssh', 'AMENT_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder:/home/pirobot/git/ros_pathfinder/install/action_interfaces:/home/pirobot/ros2_ws/install/my_robot_controller:/opt/ros/kilted', 'SHELL': '/bin/bash', 'QT_ACCESSIBILITY': '1', 'GDMSESSION': 'ubuntu', 'LESSCLOSE': '/usr/bin/lesspipe %s %s', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET', 'QT_IM_MODULE': 'ibus', 'PWD': '/home/pirobot/git/ros_pathfinder/build/ros_pathfinder', 'XDG_CONFIG_DIRS': '/etc/xdg/xdg-ubuntu:/etc/xdg', 'XDG_DATA_DIRS': '/usr/share/ubuntu:/usr/share/gnome:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop', 'PYTHONPATH': '/home/pirobot/git/ros_pathfinder/build/ros_pathfinder/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages:/home/pirobot/git/ros_pathfinder/install/action_interfaces/lib/python3.12/site-packages:/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages:/home/pirobot/ros2_ws/install/my_robot_controller/lib/python3.12/site-packages:/opt/ros/kilted/lib/python3.12/site-packages', 'COLCON': '1', 'MEMORY_PRESSURE_WRITE': 'c29tZSAyMDAwMDAgMjAwMDAwMAA=', 'VTE_VERSION': '7600', 'CMAKE_PREFIX_PATH': '/home/pirobot/git/ros_pathfinder/install/action_interfaces:/home/pirobot/git/ros_pathfinder/install/sllidar_ros2:/opt/ros/kilted/opt/gz_math_vendor:/opt/ros/kilted/opt/gz_utils_vendor:/opt/ros/kilted/opt/gz_cmake_vendor'}, 'shell': False}
+[11.329176] (-) TimerEvent: {}
+[11.430486] (-) TimerEvent: {}
+[11.533237] (-) TimerEvent: {}
+[11.636495] (-) TimerEvent: {}
+[11.743350] (-) TimerEvent: {}
+[11.844841] (-) TimerEvent: {}
+[11.947676] (-) TimerEvent: {}
+[12.048614] (-) TimerEvent: {}
+[12.154761] (-) TimerEvent: {}
+[12.258197] (-) TimerEvent: {}
+[12.359520] (-) TimerEvent: {}
+[12.463208] (-) TimerEvent: {}
+[12.566108] (-) TimerEvent: {}
+[12.670805] (-) TimerEvent: {}
+[12.773275] (-) TimerEvent: {}
+[12.877952] (-) TimerEvent: {}
+[12.978720] (-) TimerEvent: {}
+[13.082618] (-) TimerEvent: {}
+[13.184700] (-) TimerEvent: {}
+[13.290911] (-) TimerEvent: {}
+[13.391855] (-) TimerEvent: {}
+[13.497244] (-) TimerEvent: {}
+[13.600970] (-) TimerEvent: {}
+[13.708997] (-) TimerEvent: {}
+[13.809622] (-) TimerEvent: {}
+[13.912129] (-) TimerEvent: {}
+[14.015514] (-) TimerEvent: {}
+[14.120674] (-) TimerEvent: {}
+[14.222033] (-) TimerEvent: {}
+[14.327840] (-) TimerEvent: {}
+[14.432549] (-) TimerEvent: {}
+[14.533123] (-) TimerEvent: {}
+[14.634097] (-) TimerEvent: {}
+[14.741326] (-) TimerEvent: {}
+[14.843497] (-) TimerEvent: {}
+[14.948531] (-) TimerEvent: {}
+[15.050470] (ros_pathfinder) StdoutLine: {'line': b'running egg_info\n'}
+[15.051784] (-) TimerEvent: {}
+[15.156290] (-) TimerEvent: {}
+[15.265171] (-) TimerEvent: {}
+[15.365900] (-) TimerEvent: {}
+[15.371120] (ros_pathfinder) StdoutLine: {'line': b'writing ../../build/ros_pathfinder/ros_pathfinder.egg-info/PKG-INFO\n'}
+[15.384613] (ros_pathfinder) StdoutLine: {'line': b'writing dependency_links to ../../build/ros_pathfinder/ros_pathfinder.egg-info/dependency_links.txt\n'}
+[15.394502] (ros_pathfinder) StdoutLine: {'line': b'writing entry points to ../../build/ros_pathfinder/ros_pathfinder.egg-info/entry_points.txt\n'}
+[15.398831] (ros_pathfinder) StdoutLine: {'line': b'writing requirements to ../../build/ros_pathfinder/ros_pathfinder.egg-info/requires.txt\n'}
+[15.399404] (ros_pathfinder) StdoutLine: {'line': b'writing top-level names to ../../build/ros_pathfinder/ros_pathfinder.egg-info/top_level.txt\n'}
+[15.470532] (-) TimerEvent: {}
+[15.577903] (-) TimerEvent: {}
+[15.679540] (-) TimerEvent: {}
+[15.788691] (-) TimerEvent: {}
+[15.895085] (-) TimerEvent: {}
+[15.998837] (-) TimerEvent: {}
+[16.099497] (-) TimerEvent: {}
+[16.207534] (-) TimerEvent: {}
+[16.308396] (-) TimerEvent: {}
+[16.379469] (ros_pathfinder) StdoutLine: {'line': b"reading manifest file '../../build/ros_pathfinder/ros_pathfinder.egg-info/SOURCES.txt'\n"}
+[16.382491] (ros_pathfinder) StdoutLine: {'line': b"adding license file 'LICENSE'\n"}
+[16.400678] (ros_pathfinder) StdoutLine: {'line': b"writing manifest file '../../build/ros_pathfinder/ros_pathfinder.egg-info/SOURCES.txt'\n"}
+[16.411012] (ros_pathfinder) StdoutLine: {'line': b'running build\n'}
+[16.411599] (-) TimerEvent: {}
+[16.411954] (ros_pathfinder) StdoutLine: {'line': b'running build_py\n'}
+[16.412302] (ros_pathfinder) StdoutLine: {'line': b'copying ros_pathfinder/lidar_static_transform.py -> /home/pirobot/git/ros_pathfinder/build/ros_pathfinder/build/lib/ros_pathfinder\n'}
+[16.426112] (ros_pathfinder) StdoutLine: {'line': b'running install\n'}
+[16.513213] (-) TimerEvent: {}
+[16.542505] (ros_pathfinder) StdoutLine: {'line': b'running install_lib\n'}
+[16.617528] (-) TimerEvent: {}
+[16.722499] (-) TimerEvent: {}
+[16.827524] (-) TimerEvent: {}
+[16.930879] (-) TimerEvent: {}
+[17.034560] (-) TimerEvent: {}
+[17.135223] (-) TimerEvent: {}
+[17.163921] (ros_pathfinder) StdoutLine: {'line': b'copying /home/pirobot/git/ros_pathfinder/build/ros_pathfinder/build/lib/ros_pathfinder/lidar_static_transform.py -> /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages/ros_pathfinder\n'}
+[17.181206] (ros_pathfinder) StdoutLine: {'line': b'byte-compiling /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages/ros_pathfinder/lidar_static_transform.py to lidar_static_transform.cpython-312.pyc\n'}
+[17.227264] (ros_pathfinder) StdoutLine: {'line': b'running install_data\n'}
+[17.241936] (ros_pathfinder) StdoutLine: {'line': b'running install_egg_info\n'}
+[17.242612] (-) TimerEvent: {}
+[17.352522] (-) TimerEvent: {}
+[17.455542] (-) TimerEvent: {}
+[17.560578] (-) TimerEvent: {}
+[17.596908] (ros_pathfinder) StdoutLine: {'line': b"removing '/home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages/ros_pathfinder-0.0.0-py3.12.egg-info' (and everything under it)\n"}
+[17.624220] (ros_pathfinder) StdoutLine: {'line': b'Copying ../../build/ros_pathfinder/ros_pathfinder.egg-info to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/python3.12/site-packages/ros_pathfinder-0.0.0-py3.12.egg-info\n'}
+[17.649746] (ros_pathfinder) StdoutLine: {'line': b'running install_scripts\n'}
+[17.667166] (-) TimerEvent: {}
+[17.771512] (-) TimerEvent: {}
+[17.873442] (-) TimerEvent: {}
+[17.975316] (-) TimerEvent: {}
+[18.082536] (-) TimerEvent: {}
+[18.183165] (-) TimerEvent: {}
+[18.284439] (-) TimerEvent: {}
+[18.389807] (-) TimerEvent: {}
+[18.496501] (-) TimerEvent: {}
+[18.604492] (-) TimerEvent: {}
+[18.705879] (-) TimerEvent: {}
+[18.814139] (-) TimerEvent: {}
+[18.822427] (ros_pathfinder) StdoutLine: {'line': b'Installing lidar_static_tf script to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/ros_pathfinder\n'}
+[18.829638] (ros_pathfinder) StdoutLine: {'line': b'Installing listener script to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/ros_pathfinder\n'}
+[18.839289] (ros_pathfinder) StdoutLine: {'line': b'Installing motor_controller script to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/ros_pathfinder\n'}
+[18.839808] (ros_pathfinder) StdoutLine: {'line': b'Installing odom_node script to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/ros_pathfinder\n'}
+[18.843018] (ros_pathfinder) StdoutLine: {'line': b'Installing talker script to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/ros_pathfinder\n'}
+[18.846598] (ros_pathfinder) StdoutLine: {'line': b'Installing teleop_node script to /home/pirobot/git/ros_pathfinder/install/ros_pathfinder/lib/ros_pathfinder\n'}
+[18.861539] (ros_pathfinder) StdoutLine: {'line': b"writing list of installed files to '/home/pirobot/git/ros_pathfinder/build/ros_pathfinder/install.log'\n"}
+[18.920529] (-) TimerEvent: {}
+[19.021255] (-) TimerEvent: {}
+[19.124535] (-) TimerEvent: {}
+[19.231535] (-) TimerEvent: {}
+[19.332431] (-) TimerEvent: {}
+[19.433368] (-) TimerEvent: {}
+[19.537551] (-) TimerEvent: {}
+[19.593652] (ros_pathfinder) CommandEnded: {'returncode': 0}
+[19.662610] (-) TimerEvent: {}
+[19.730837] (ros_pathfinder) JobEnded: {'identifier': 'ros_pathfinder', 'rc': 0}
+[19.743348] (-) EventReactorShutdown: {}

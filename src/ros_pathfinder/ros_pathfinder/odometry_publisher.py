@@ -12,8 +12,8 @@ import busio
 
 import math
 
-HEADER_FRAME = 'odom'
-CHILD_FRAME = 'base_link'
+HEADER_FRAME = 'odom' # static world frame
+CHILD_FRAME = 'base_link' # robot frame
 
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
 
