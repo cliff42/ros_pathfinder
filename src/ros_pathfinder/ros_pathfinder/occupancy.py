@@ -40,6 +40,7 @@ class OccupancyMapper(Node):
             self.get_logger().warn('could not look up odom->laser transform')
             return
         
+        self.grid = [-1] * (self.width * self.height) # reset map
         laser_x = odom_to_laser_tf.transform.translation.x
         laser_y = odom_to_laser_tf.transform.translation.y
         qx = odom_to_laser_tf.transform.rotation.x
@@ -50,43 +51,68 @@ class OccupancyMapper(Node):
 
         angle = msg.angle_min
 
-        for point in msg.ranges:
+        for point in msg.ranges: 
+            if point >= float('inf') or point == float('nan'):
+                angle += msg.angle_increment
+                continue
+
             if point > msg.range_max or point < msg.range_min:
+                angle += msg.angle_increment
                 continue
 
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
-            scan_x = round(scan_x / self.resolution) + round((self.width / 2) - 1)
-            scan_y = round(scan_y / self.resolution) + round((self.height / 2) - 1)
+            scan_x = int((scan_x - self.origin_x) / self.resolution)
+            scan_y = int((scan_y- self.origin_y) / self.resolution)
 
-            start_x = round(laser_x / self.resolution) + round((self.width / 2) + 1)
-            start_y = round(laser_y / self.resolution) + round((self.height / 2) - 1)
+            start_x = int((laser_x - self.origin_x) / self.resolution)
+            start_y = int((laser_y - self.origin_y) / self.resolution)
 
             self.bresenham(start_x, start_y, scan_x, scan_y)
 
-            angle += msg.angle_increment 
+            angle += msg.angle_increment
+
+            
 
         self.publish_map()
 
-        # TODO: some kind of line finding alogrithm on a grid (bresenham's), then calculate occupancy and publish grid
-
-        # iterate through all scan ponint
-        # convert to grid coords -> cos(yaw + angle) and shfit with laser_x, laser_y * []dist
-        # run each 
-
     def bresenham(self, start_x, start_y, scan_x, scan_y):
-        m_new = 2 * (scan_y - start_x)
-        slope_error_new = m_new - (scan_x - start_x)
+        dx = abs(scan_x - start_x)
+        dy = abs(scan_y - start_y)
 
-        y = start_y
-        for x in range(start_x, scan_x+1):
-            self.grid[x + y * self.width] = 0 # unoccupied
-            slope_error_new = slope_error_new + m_new
-            if (slope_error_new >= 0):
-                y = y+1
-                slope_error_new = slope_error_new - 2*(scan_x - start_x)
-        self.grid[scan_x + scan_y * self.width] = 100 # occupied
+        if dx > self.width / 2 or dy > self.height / 2:
+            return
+
+        x_inc = 1
+        if scan_x < start_x:
+            x_inc = -1
+        
+        y_inc = 1
+        if scan_y < start_y:
+            y_inc = -1
+
+        x, y = start_x, start_y
+
+        error = dx - dy
+
+        while(True):
+            if x == scan_x and y == scan_y:
+                self.grid[scan_x + scan_y * self.width] = 100 # occupied
+                break
+
+            self.grid[x + y * self.width] = 0 # unoccupied   
+            error2 = 2 * error # to avoid checking float
+
+            # move in x dir
+            if (error2 > -1 * dy):
+                error -= dy
+                x += x_inc
+            
+            # move in y dir
+            if (error2 < dx):
+                error += dx
+                y += y_inc
             
 
 
