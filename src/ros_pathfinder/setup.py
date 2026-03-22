@@ -30,7 +30,8 @@ setup(
             "teleop_node = ros_pathfinder.teleop:main",
             "odom_node = ros_pathfinder.odometry_publisher:main",
             "lidar_static_tf = ros_pathfinder.lidar_static_transform:main",
-            "occupancy = ros_pathfinder.occupancy:main"
+            "occupancy = ros_pathfinder.occupancy:main",
+            "localization = ros_pathfinder.localization:main"
         ],
     },
 )

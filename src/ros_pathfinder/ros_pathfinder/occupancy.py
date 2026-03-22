@@ -52,7 +52,7 @@ class OccupancyMapper(Node):
         angle = msg.angle_min
 
         for point in msg.ranges: 
-            if point >= float('inf') or point == float('nan'):
+            if math.isinf(point) or math.isnan(point):
                 angle += msg.angle_increment
                 continue
 
