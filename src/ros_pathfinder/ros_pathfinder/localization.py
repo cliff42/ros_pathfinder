@@ -16,6 +16,7 @@ class LandmarkIdentification(Node):
     def __init__(self):
         super().__init__('localization')
         self.line_publisher = self.create_publisher(MarkerArray, 'ransac', 10) #change
+        self.landmark_publisher = self.create_publisher(MarkerArray,'landmarks',10)
         self.scan_subscriber = self.create_subscription(LaserScan,'scan', self.scan_callback, 10)
 
         self.tf_buffer = Buffer()
@@ -76,14 +77,18 @@ class LandmarkIdentification(Node):
         N = 100 #number of iterations for ransac (lines to check)
         S = 5 #number of samples to fit each line to
         D = 5 #degrees from initial sample point
-        X = 0.005 #max distance (in meters) that points must be from line
-        CONSENSUS = 20 #minimum number of points within X meters for a line to be considered adequate
-        landmarks = self.ransac(angle_list,msg.angle_increment,range_dict,N,S,D,X,CONSENSUS)
+        # X = 0.005 #max distance (in meters) that points must be from line
+        X = 0.05
+        CONSENSUS = 50 #minimum number of points within X meters for a line to be considered adequate
+        lines,landmarks = self.ransac(angle_list,msg.angle_increment,range_dict,N,S,D,X,CONSENSUS)
+        self.get_logger().info('Number of lines: %s' % len(lines))
+        self.get_logger().info('Number of landmarks: %s' % len(landmarks))
+        
 
         marker_array = MarkerArray()
         id = 0
-        for landmark in landmarks:
-            points_in_line = self.points_from_line(landmark[0], landmark[1], landmark[2], landmark[3])
+        for line in lines:
+            points_in_line = self.points_from_line(line[0], line[1], line[2], line[3], line[4], line[5])
             line_marker = Marker()
             line_marker.header.stamp = self.get_clock().now().to_msg()
             line_marker.header.frame_id = 'odom'
@@ -102,20 +107,52 @@ class LandmarkIdentification(Node):
                 p.z = 0.0
                 line_marker.points.append(p)
             marker_array.markers.append(line_marker)
-
-
         self.line_publisher.publish(marker_array)
 
+        landmark_array = MarkerArray()
+        id = 0
+        for landmark in landmarks:
+            landmark_marker = Marker()
+            landmark_marker.header.stamp = self.get_clock().now().to_msg()
+            landmark_marker.header.frame_id = 'odom'
+            landmark_marker.type = Marker.SPHERE
+            landmark_marker.scale.x = 0.1
+            landmark_marker.scale.y = 0.1
+            landmark_marker.scale.z = 0.1
+            landmark_marker.color.r = 1.0
+            landmark_marker.color.g = 0.0
+            landmark_marker.color.b = 0.0
+            landmark_marker.color.a = 1.0
+            landmark_marker.id = id
+            id += 1
 
-    def points_from_line(self, m, c, min_x, max_x):
-        start_point = (min_x, m * min_x + c)
-        end_point = (max_x, m * max_x + c)    
+            landmark_marker.pose.position.x = float(landmark[0])
+            landmark_marker.pose.position.y = float(landmark[1])
+            landmark_marker.pose.position.z = 0.0
+            landmark_marker.pose.orientation.w = 1.0
+            landmark_array.markers.append(landmark_marker)
+        
+        self.landmark_publisher.publish(landmark_array)
+
+
+
+
+    def points_from_line(self, m, c, min_x, max_x,min_y,max_y):
+        #set bounds of line in y direction if line near vertical (|m|>1)
+        #set bounds of line in x direction if line near horizontal (|m|<=1)
+        if abs(m)>1:
+            start_point = ((min_y-c)/m,min_y)
+            end_point  = ((max_y-c)/m,max_y) 
+        else:
+            start_point = (min_x, m * min_x + c)
+            end_point = (max_x, m * max_x + c)   
         return [start_point, end_point]
     
     def angle_diff(self, a, b):
         return min(abs(a - b), (2*math.pi - abs(a - b)))
 
     def ransac(self,angle_list,angle_increment,range_dict,N,S,D,X,CONSENSUS):
+        landmark_lines = []
         landmarks = []
         for i in range(N):
             rand_angle = random.choice(angle_list)
@@ -137,7 +174,7 @@ class LandmarkIdentification(Node):
             denom = math.sqrt(A*A + B*B)
             
             readings_on_line = []
-            for a in vote_subset:
+            for a in angle_list:
                 point_x = range_dict[a][0]
                 point_y = range_dict[a][1]
 
@@ -147,12 +184,20 @@ class LandmarkIdentification(Node):
 
             if len(readings_on_line) > CONSENSUS:
                 new_m, new_c = self.least_squares(readings_on_line, len(readings_on_line))
-                landmarks.append((new_m, new_c, min(readings_on_line[0]), max(readings_on_line[0])))
+                landmark_lines.append((new_m, new_c, min(readings_on_line[0]), max(readings_on_line[0]),min(readings_on_line[1]),max(readings_on_line[1])))
 
 
-            # TODO: want to find point on landmark line that we can track (point orthog. to origin)
+        #find point on landmark line that we can track (point orthog. to origin)
+        for line in landmark_lines:
+            m,c = line[0],line[1]
+            b = -1/m #orthogonal line has slope -1/m with y intercept 0 (passes through origin)
+            landmark_x = c/(b-m)
+            landmark_y = b *landmark_x
+            landmarks.append([landmark_x,landmark_y])
+        
 
-        return landmarks
+
+        return landmark_lines,landmarks
 
     def least_squares(self,list, S):
         sum_x = 0
