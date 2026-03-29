@@ -12,6 +12,13 @@ from tf2_ros import LookupException, ConnectivityException, ExtrapolationExcepti
 import random
 import math
 
+class LandmarkPoint:
+    def __init__(self, x, y, count):
+        self.x = x
+        self.y = y
+        self.count = count
+
+
 class LandmarkIdentification(Node):
     def __init__(self):
         super().__init__('localization')
@@ -31,6 +38,10 @@ class LandmarkIdentification(Node):
 
         # 0 for unoccupied, 1 for occupied, -1 for unknown
         self.grid = [-1] * (self.width * self.height) # init grid to be all unknown
+
+        self.landmark_db = []
+        self.good_landmark_min_count = 5
+        self.min_distance_same_landmark = 0.01 # TODO: validate
 
     def scan_callback(self, msg: LaserScan):
         try:
@@ -80,7 +91,7 @@ class LandmarkIdentification(Node):
         # X = 0.005 #max distance (in meters) that points must be from line
         X = 0.05
         CONSENSUS = 50 #minimum number of points within X meters for a line to be considered adequate
-        lines,landmarks = self.ransac(angle_list,msg.angle_increment,range_dict,N,S,D,X,CONSENSUS)
+        lines, landmarks = self.ransac(angle_list,msg.angle_increment,range_dict,N,S,D,X,CONSENSUS)
         self.get_logger().info('Number of lines: %s' % len(lines))
         self.get_logger().info('Number of landmarks: %s' % len(landmarks))
         
@@ -134,7 +145,45 @@ class LandmarkIdentification(Node):
         
         self.landmark_publisher.publish(landmark_array)
 
+        # check landmarks against global db
+        for landmark in landmarks:
+            closest_landmark_idx, dist = self.get_closest_landmark_from_db(landmark)
 
+            if closest_landmark_idx == -1:
+                lp = LandmarkPoint(landmark[0], landmark[1], 1)
+                self.landmark_db.append(lp)
+                continue
+            
+            if dist <= self.min_distance_same_landmark:
+               self.landmark_db[closest_landmark_idx].count += 1
+            else:
+                lp = LandmarkPoint(landmark[0], landmark[1], 1)
+                self.landmark_db.append(lp)
+
+    def get_closest_landmark_from_db(self, landmark):
+        min_dist = float("inf")
+        idx = -1
+        for i, l in enumerate(self.landmark_db):
+            dist = math.sqrt((landmark[0] - l.x) * (landmark[0] - l.x) + (landmark[1] - l.y) * (landmark[1] - l.y))
+            if dist < min_dist:
+                min_dist = dist
+                idx = i
+        return idx, min_dist
+    
+
+    # TODO: use this with EKF
+    def get_closest_good_landmark(self, landmark):
+        min_dist = float("inf")
+        idx = -1
+        for i, l in enumerate(self.landmark_db):
+            if l.count < self.good_landmark_min_count:
+                continue
+
+            dist = math.sqrt((landmark[0] - l.x)**2 + (landmark[1] - l.y)**2)
+            if dist < min_dist:
+                min_dist = dist
+                idx = i
+        return idx, min_dist
 
 
     def points_from_line(self, m, c, min_x, max_x,min_y,max_y):
@@ -158,7 +207,6 @@ class LandmarkIdentification(Node):
             rand_angle = random.choice(angle_list)
 
             angle_subset = [a for a in angle_list if self.angle_diff(a, rand_angle) < math.radians(D)]
-            vote_subset = [a for a in angle_list if self.angle_diff(a, rand_angle) < math.radians(10)]
 
             if len(angle_subset) < S:
                 continue
@@ -184,9 +232,12 @@ class LandmarkIdentification(Node):
 
             if len(readings_on_line) > CONSENSUS:
                 new_m, new_c = self.least_squares(readings_on_line, len(readings_on_line))
-                landmark_lines.append((new_m, new_c, min(readings_on_line[0]), max(readings_on_line[0]),min(readings_on_line[1]),max(readings_on_line[1])))
+                xs = [p[0] for p in readings_on_line]
+                ys = [p[1] for p in readings_on_line]
+                landmark_lines.append((new_m, new_c, min(xs), max(xs), min(ys), max(ys)))
 
 
+        # TODO: to check (is this orthog to static origin or odom origin) - i think we want this to be orthog to true static origin
         #find point on landmark line that we can track (point orthog. to origin)
         for line in landmark_lines:
             m,c = line[0],line[1]
@@ -197,7 +248,7 @@ class LandmarkIdentification(Node):
         
 
 
-        return landmark_lines,landmarks
+        return landmark_lines, landmarks
 
     def least_squares(self,list, S):
         sum_x = 0
