@@ -9,6 +9,8 @@ from sensor_msgs.msg import LaserScan
 from tf2_ros import Buffer, TransformListener
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
 
+import numpy as np
+
 import random
 import math
 
@@ -43,6 +45,20 @@ class LandmarkIdentification(Node):
         self.good_landmark_min_count = 5
         self.min_distance_same_landmark = 0.01 # TODO: validate
 
+        self.ekf_initialized = False
+        self.prev_odom_x = None
+        self.prev_odom_y = None
+        self.prev_odom_theta = None
+        # TODO: these are just the robot parts for now, need to add the landmarks later
+        # EFK system state (called X in SLAM doc)
+        self.system_state_X = np.zeros((3, 1), dtype=float)
+        # EFK covariance matrix (called P in SLAM doc)
+        self.covariance_matrix_P = np.diag([
+            0.05 ** 2,
+            0.05 ** 2,
+            (5.0 * math.pi / 180.0) ** 2
+        ])
+
     def scan_callback(self, msg: LaserScan):
         try:
             odom_to_laser_tf = self.tf_buffer.lookup_transform(
@@ -63,6 +79,34 @@ class LandmarkIdentification(Node):
         qw = odom_to_laser_tf.transform.rotation.w
         laser_yaw = math.atan2(2*(qw*qz + qx*qy), 1 - 2*(qy*qy + qz * qz))
 
+        # TODO: update ekf to be based on odom pose not laser
+        if not self.ekf_initialized:
+            self.system_state_X[0, 0] = laser_x
+            self.system_state_X[1, 0] = laser_y
+            self.system_state_X[2, 0] = laser_yaw
+
+            self.prev_odom_x = laser_x
+            self.prev_odom_y = laser_y
+            self.prev_odom_theta = laser_yaw
+            self.ekf_initialized = True
+        else:
+            delta_x = laser_x - self.prev_odom_x
+            delta_y = laser_y - self.prev_odom_y
+            delta_theta = self.wrap_angle(laser_yaw - self.prev_odom_theta)
+
+            self.ekf_predict(delta_x, delta_y, delta_theta)
+
+            self.prev_odom_x = laser_x
+            self.prev_odom_y = laser_y
+            self.prev_odom_theta = laser_yaw
+
+        self.get_logger().info(
+            f"EKF pose (from X): x={self.system_state_X[0,0]:.3f}, y={self.system_state_X[1,0]:.3f}, theta={self.system_state_X[2,0]:.3f}"
+        )
+        self.get_logger().info(
+            f"P diag: {self.covariance_matrix_P[0,0]:.6f}, {self.covariance_matrix_P[1,1]:.6f}, {self.covariance_matrix_P[2,2]:.6f}"
+        )
+
         angle = msg.angle_min
 
         angle_list = []
@@ -78,8 +122,17 @@ class LandmarkIdentification(Node):
                 angle += msg.angle_increment
                 continue
 
-            scan_x = math.cos(angle + laser_yaw) * point + laser_x
-            scan_y = math.sin(angle + laser_yaw) * point + laser_y
+            # scan_x = math.cos(angle + laser_yaw) * point + laser_x
+            # scan_y = math.sin(angle + laser_yaw) * point + laser_y
+
+            # TODO: confirm this works
+            # TODO: after switching to odom pose for ekf we need to transform for laser here
+            ekf_x = self.system_state_X[0, 0]
+            ekf_y = self.system_state_X[1, 0]
+            ekf_theta = self.system_state_X[2, 0]
+
+            scan_x = math.cos(angle + ekf_theta) * point + ekf_x
+            scan_y = math.sin(angle + ekf_theta) * point + ekf_y
 
             range_dict[angle] = (scan_x,scan_y)
             angle_list.append(angle)
@@ -164,7 +217,7 @@ class LandmarkIdentification(Node):
         min_dist = float("inf")
         idx = -1
         for i, l in enumerate(self.landmark_db):
-            dist = math.sqrt((landmark[0] - l.x) * (landmark[0] - l.x) + (landmark[1] - l.y) * (landmark[1] - l.y))
+            dist = math.sqrt((landmark[0] - l.x)**2 + (landmark[1] - l.y)**2)
             if dist < min_dist:
                 min_dist = dist
                 idx = i
@@ -184,6 +237,29 @@ class LandmarkIdentification(Node):
                 min_dist = dist
                 idx = i
         return idx, min_dist
+    
+
+    def wrap_angle(self, angle):
+        return math.atan2(math.sin(angle), math.cos(angle))
+
+    def ekf_predict(self, delta_x, delta_y, delta_theta):
+        self.system_state_X[0, 0] += delta_x
+        self.system_state_X[1, 0] += delta_y
+        self.system_state_X[2, 0] = self.wrap_angle(self.Xr[2, 0] + delta_theta)
+
+        jacobian_pred_A = np.array([
+            [1.0, 0.0, -delta_y],
+            [0.0, 1.0,  delta_x],
+            [0.0, 0.0,  1.0],
+        ], dtype=float)
+
+        sx = 0.05 * abs(delta_x) + 0.005
+        sy = 0.05 * abs(delta_y) + 0.005
+        st = 0.10 * abs(delta_theta) + 0.01
+
+        Q = np.diag([sx * sx, sy * sy, st * st])
+
+        self.covariance_matrix_P = jacobian_pred_A @ self.covariance_matrix_P @ jacobian_pred_A.T + Q
 
 
     def points_from_line(self, m, c, min_x, max_x,min_y,max_y):
