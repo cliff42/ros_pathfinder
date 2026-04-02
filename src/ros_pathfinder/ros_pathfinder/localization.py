@@ -94,6 +94,7 @@ class LandmarkIdentification(Node):
             delta_y = laser_y - self.prev_odom_y
             delta_theta = self.wrap_angle(laser_yaw - self.prev_odom_theta)
 
+            # TODO: only run EKF update when the robot is moving (odom frame updates) not just every time we get a new scan
             self.ekf_predict(delta_x, delta_y, delta_theta)
 
             self.prev_odom_x = laser_x
