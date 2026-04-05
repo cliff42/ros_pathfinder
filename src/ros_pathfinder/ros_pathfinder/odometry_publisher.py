@@ -4,7 +4,7 @@ from rclpy.node import Node
 
 from nav_msgs.msg import Odometry
 from tf2_ros import TransformBroadcaster
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Vector3
 
 from smbus2 import SMBus
 import board
@@ -73,12 +73,15 @@ class OdometryPublisher(Node):
         # wheel is backwards
         self.vel_l = -1*self.vel_l
 
+        # TODO: should we reuse the linear velocity here
         x_dot = ((self.vel_r + self.vel_l) / 2) * math.cos(self.theta)
         self.x = self.x + x_dot * self.timer_period
 
+        # TODO: should we reuse the linear velocity here
         y_dot = ((self.vel_r + self.vel_l) / 2) * math.sin(self.theta)
         self.y = self.y + y_dot * self.timer_period
 
+        # TODO: should we reuse the angular velocity here
         theta_dot = (self.vel_r - self.vel_l) / 0.55 # measured from distance between wheels (m)
         self.theta = self.theta + theta_dot * self.timer_period
 
@@ -98,9 +101,35 @@ class OdometryPublisher(Node):
         msg = Odometry()
         msg.header = tf.header
         msg.child_frame_id = CHILD_FRAME
+
+        # TODO: do we even want to publish the pose at all now?
         msg.pose.pose.position.x = self.x
         msg.pose.pose.position.y = self.y
         msg.pose.pose.orientation = tf.transform.rotation
+
+        # linear velocity
+        msg.twist.twist.linear.x = (self.vel_r + self.vel_l) / 2.0 # from https://en.wikipedia.org/wiki/Differential_wheeled_robot
+        msg.twist.twist.linear.y = 0.0
+        msg.twist.twist.linear.z = 0.0
+
+        # TODO: switch angular velocity to use IMU data (keep encoder data for linear)
+        # angular velocity
+        msg.twist.twist.angular.x = 0.0
+        msg.twist.twist.angular.y = 0.0
+        msg.twist.twist.angular.z = (self.vel_r - self.vel_l) / 0.55 # from https://en.wikipedia.org/wiki/Differential_wheeled_robot
+
+        # TODO: determine real values for this (account for IMU error for angular and encoder error for linear)
+        # (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
+        # 0.05 is Var(vx) (linear velocity) 0.1 is Var(wz) (angular velocity)
+        # TODO: do we want to set `cov_vx_wz` (top right and bottom left of this matrix)?
+        msg.twist.covariance = [
+            0.05, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0,  1e6, 0.0, 0.0, 0.0, 0.0,
+            0.0,  0.0, 1e6, 0.0, 0.0, 0.0,
+            0.0,  0.0, 0.0, 1e6, 0.0, 0.0,
+            0.0,  0.0, 0.0, 0.0, 1e6, 0.0,
+            0.0,  0.0, 0.0, 0.0, 0.0, 0.1
+        ]
 
         self.odom_publisher.publish(msg)
 
@@ -114,16 +143,13 @@ class OdometryPublisher(Node):
         return status
     
     def get_distance(self, angle, prev_angle, distance):
-        delta_angle = 0
-        if prev_angle > 270 and angle < 90:
-            delta_angle = angle + 360 - prev_angle
-        elif prev_angle < 90 and angle > 270:
-            delta_angle = 360 - angle + prev_angle
-        else:
-            delta_angle = angle - prev_angle
-        distance += (delta_angle/7) * (math.pi/180)*4*0.0254
-        prev_angle = angle
-        return distance, prev_angle
+        delta_angle = angle - prev_angle
+        if delta_angle > 180:
+            delta_angle -= 360
+        elif delta_angle < -180:
+            delta_angle += 360
+        distance += (delta_angle / 7.0) * (math.pi / 180.0) * 4 * 0.0254
+        return distance, angle
     
     def get_velocity(self,dist,prev_dist,timer_period):
         vel = (dist - prev_dist)/timer_period
