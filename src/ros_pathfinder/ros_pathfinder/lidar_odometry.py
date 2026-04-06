@@ -1,0 +1,86 @@
+import rclpy
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+
+from nav_msgs.msg import Odometry
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped, Vector3
+from sensor_msgs.msg import LaserScan
+from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
+
+import numpy as np
+
+import math
+
+HEADER_FRAME = 'lidar_odom' # static world frame
+CHILD_FRAME = 'base_link' # robot frame
+
+class LidarOdometry(Node):
+    # TODO: start with wheel odom as initial state
+
+    def __init__(self):
+        super().__init__('lidar_odometry')
+        self.lidar_odom_publisher = self.create_publisher(Odometry, 'lidar_odom', 10)
+        self.scan_subscriber = self.create_subscription(LaserScan,'scan', self.scan_callback, 10)
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.timer_period = 0.02
+        self.timer = self.create_timer(self.timer_period, self.odom_callback)
+        self.prev_points = None # TODO: use this as target points in ICP algorithm
+
+    def scan_callback(self, msg: LaserScan):
+        try:
+            odom_to_laser_tf = self.tf_buffer.lookup_transform(
+                'odom',                  
+                msg.header.frame_id, # laser
+                rclpy.time.Time()
+            )
+        except (LookupException, ConnectivityException, ExtrapolationException):
+            self.get_logger().warn('could not look up odom->laser transform')
+            return
+        
+        points = self.scan_to_points(msg)
+        if self.prev_points is None:
+            self.prev_points = points
+            return
+        
+        # TODO: find corresponding pts via nearest neighbour
+        
+        # TODO:
+        # 1. calculate centroids
+        # 2. center target and source scans
+        # 3. create covariance matrix
+        # 4. SVD to get rotation
+        # 5. apply translation
+
+    def scan_to_points(self, scan_msg):
+        points = []
+        angle = scan_msg.min_angle
+
+        for range in scan_msg.ranges:
+            if math.isinf(range) or math.isnan(range) or range > scan_msg.range_max or range < scan_msg.range_min:
+                angle += scan_msg.angle_increment
+                continue
+            
+            x = range * math.cos(angle)
+            y = range * math.sin(angle)
+            points.append([x, y])
+            angle += scan_msg.angle_increment
+
+        return np.array(points, dtype=float)
+
+    def get_centroid(self, pts):
+        point_sum = np.sum(pts, axis=0)
+        return point_sum / float(len(pts))
+
+def main(args=None):
+    try:
+        with rclpy.init(args=args):
+            odom_publisher = LidarOdometry()
+            rclpy.spin(odom_publisher)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+
+
+if __name__ == '__main__':
+    main()
+
