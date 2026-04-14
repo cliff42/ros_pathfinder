@@ -27,6 +27,10 @@ class LidarOdometry(Node):
         self.timer_period = 0.02
         self.timer = self.create_timer(self.timer_period, self.odom_callback)
         self.prev_points_tree = None # TODO: use this as target points in ICP algorithm
+        self.x = 0.0
+        self.y = 0.0
+        self.z = 0.0
+        self.theta = 0.0
 
     def scan_callback(self, msg: LaserScan):
         try:
@@ -63,31 +67,50 @@ class LidarOdometry(Node):
         R = np.dot(V_t.T,U.T)
         t = target_centroid - source_centroid
         
-        # 5. apply translation to wheel odom
-        new_T = np.identity(3)
-        new_T[:2,2] = np.squeeze(t)
-        new_T[:2,:2] = R
+  
+        dtheta = math.atan2(R[1, 0], R[0, 0])
+        dx = float(t[0])
+        dy = float(t[1])
 
-        T = np.dot(odom_to_laser_tf, new_T)
+        c = math.cos(self.theta)
+        s = math.sin(self.theta)
+
+        self.x += c * dx - s * dy
+        self.y += s * dx + c * dy
+        self.theta += dtheta
+        self.theta = math.atan2(math.sin(self.theta), math.cos(self.theta))
 
         tf = TransformStamped()
-        tf.header.stamp = self.get_clock().now().to_msg()
+        tf.header.stamp = msg.header.stamp
         tf.header.frame_id = HEADER_FRAME
         tf.child_frame_id = CHILD_FRAME
+        tf.transform.translation.x = self.x
+        tf.transform.translation.y = self.y
+        tf.transform.translation.z = 0.0
 
-        tf.transform.translation.x = float(self.x)
-        tf.transform.translation.y = float(self.y)
-        tf.transform.translation.z = float(self.z)
-
-        quat_z = math.sin(self.theta / 2.0)
-        quat_w = math.cos(self.theta / 2.0)
         tf.transform.rotation.x = 0.0
         tf.transform.rotation.y = 0.0
-        tf.transform.rotation.z = quat_z
-        tf.transform.rotation.w = quat_w
-
+        tf.transform.rotation.z = math.sin(self.theta / 2.0)
+        tf.transform.rotation.w = math.cos(self.theta / 2.0)
 
         self.tf_broadcaster.sendTransform(tf)
+
+        odom = Odometry()
+        odom.header.stamp = msg.header.stamp
+        odom.header.frame_id = HEADER_FRAME
+        odom.child_frame_id = CHILD_FRAME
+
+        odom.pose.pose.position.x = self.x
+        odom.pose.pose.position.y = self.y
+        odom.pose.pose.position.z = 0.0
+        odom.pose.pose.orientation = tf.transform.rotation
+
+        # TODO: add later (do we need this?)
+        odom.twist.twist.linear.x = 0.0
+        odom.twist.twist.linear.y = 0.0
+        odom.twist.twist.angular.z = 0.0
+
+        self.lidar_odom_publisher.publish(odom)
 
         # reset previous tree
         self.prev_points_tree = KDTree(points, leaf_size=2)
