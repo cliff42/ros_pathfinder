@@ -24,8 +24,6 @@ class LidarOdometry(Node):
         self.lidar_odom_publisher = self.create_publisher(Odometry, 'lidar_odom', 10)
         self.scan_subscriber = self.create_subscription(LaserScan,'scan', self.scan_callback, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.timer_period = 0.02
-        self.timer = self.create_timer(self.timer_period, self.odom_callback)
         self.prev_points_tree = None # TODO: use this as target points in ICP algorithm
         self.x = 0.0
         self.y = 0.0
@@ -33,15 +31,15 @@ class LidarOdometry(Node):
         self.theta = 0.0
 
     def scan_callback(self, msg: LaserScan):
-        try:
-            odom_to_laser_tf = self.tf_buffer.lookup_transform(
-                'odom',                  
-                msg.header.frame_id, # laser
-                rclpy.time.Time()
-            )
-        except (LookupException, ConnectivityException, ExtrapolationException):
-            self.get_logger().warn('could not look up odom->laser transform')
-            return
+        # try:
+        #     odom_to_laser_tf = self.tf_buffer.lookup_transform(
+        #         'odom',                  
+        #         msg.header.frame_id, # laser
+        #         rclpy.time.Time()
+        #     )
+        # except (LookupException, ConnectivityException, ExtrapolationException):
+        #     self.get_logger().warn('could not look up odom->laser transform')
+        #     return
         
         points = self.scan_to_points(msg)
         if self.prev_points_tree is None:
@@ -49,7 +47,7 @@ class LidarOdometry(Node):
             return
         
         # TODO: find corresponding pts via nearest neighbour
-        matched_source_pts, matched_target_pts = self.get_matches(points, self.prev_points)
+        matched_source_pts, matched_target_pts = self.get_matches(points)
         
         # 1. calculate centroids
         source_centroid = self.get_centroid(matched_source_pts)
@@ -62,10 +60,13 @@ class LidarOdometry(Node):
         # 3. create covariance matrix
         M = np.dot(source_centered.T, target_centered)
 
-        # 4. SVD to get rotation
+        # 4. SVD to get rotation & transform
         U,W,V_t = np.linalg.svd(M)
         R = np.dot(V_t.T,U.T)
         t = target_centroid - source_centroid
+
+        # reset previous tree
+        self.prev_points_tree = KDTree(points, leaf_size=2)
         
   
         dtheta = math.atan2(R[1, 0], R[0, 0])
@@ -111,14 +112,11 @@ class LidarOdometry(Node):
         odom.twist.twist.angular.z = 0.0
 
         self.lidar_odom_publisher.publish(odom)
-
-        # reset previous tree
-        self.prev_points_tree = KDTree(points, leaf_size=2)
             
 
     def scan_to_points(self, scan_msg):
         points = []
-        angle = scan_msg.min_angle
+        angle = scan_msg.angle_min
 
         for range in scan_msg.ranges:
             if math.isinf(range) or math.isnan(range) or range > scan_msg.range_max or range < scan_msg.range_min:
@@ -139,8 +137,8 @@ class LidarOdometry(Node):
     def get_matches(self, source_pts):
         target_pts = []
         for pt in source_pts:
-            _, nearest_idx = self.prev_points_tree.query(pt, k=1) 
-            target_pts.append(self.prev_points_tree.data[nearest_idx])
+            _, nearest_idx = self.prev_points_tree.query(pt.reshape(1, -1), k=1)
+            target_pts.append(self.prev_points_tree.data[nearest_idx[0][0]])
         return source_pts, target_pts
 
 def main(args=None):
