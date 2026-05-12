@@ -32,7 +32,8 @@ setup(
             "lidar_static_tf = ros_pathfinder.lidar_static_transform:main",
             "occupancy = ros_pathfinder.occupancy:main",
             "localization = ros_pathfinder.localization:main",
-            "lidar_odom = ros_pathfinder.lidar_odometry:main"
+            "lidar_odom = ros_pathfinder.lidar_odometry:main",
+            "planner = ros_pathfinder.planning_node:main"
         ],
     },
 )

@@ -29,6 +29,12 @@ class OccupancyMapper(Node):
         # 0 for unoccupied, 1 for occupied, -1 for unknown
         self.grid = [-1] * (self.width * self.height) # init grid to be all unknown
 
+        self.timer_period = 10  # seconds
+        self.timer = self.create_timer(self.timer_period, self.timer_callback)
+
+    def timer_callback(self):
+        self.publish_map()
+        
     def scan_callback(self, msg: LaserScan):
         try:
             odom_to_laser_tf = self.tf_buffer.lookup_transform(
@@ -63,6 +69,7 @@ class OccupancyMapper(Node):
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
+            # convert to grid coords
             scan_x = int((scan_x - self.origin_x) / self.resolution)
             scan_y = int((scan_y- self.origin_y) / self.resolution)
 
@@ -75,7 +82,7 @@ class OccupancyMapper(Node):
 
             
 
-        self.publish_map()
+        # self.publish_map()
 
     def bresenham(self, start_x, start_y, scan_x, scan_y):
         dx = abs(scan_x - start_x)
