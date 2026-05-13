@@ -110,10 +110,10 @@ class LidarOdometry(Node):
     def scan_callback(self, msg: LaserScan):
         points = self.scan_to_points(msg)
         if self.prev_points_tree is None:
-            self.prev_points_tree = KDTree(points, leaf_size=2)
+            self.prev_points_tree = KDTree(points, leaf_size=10)
             return
 
-        MAX_ITER = 30
+        MAX_ITER = 10
         CONVERGENCE_T = 1e-4
         CONVERGENCE_R = 1e-5
 
@@ -158,8 +158,7 @@ class LidarOdometry(Node):
             if np.linalg.norm(t) < CONVERGENCE_T and abs(math.atan2(R[1, 0], R[0, 0])) < CONVERGENCE_R:
                 break
 
-        # reset previous tree to current raw scan
-        self.prev_points_tree = KDTree(points, leaf_size=2)
+        self.prev_points_tree = KDTree(points, leaf_size=10)
 
         dtheta = math.atan2(R_total[1, 0], R_total[0, 0])
         dx = float(t_total[0])
@@ -227,36 +226,29 @@ class LidarOdometry(Node):
             
 
     def scan_to_points(self, scan_msg):
-        points = []
-        angle = scan_msg.angle_min
-
-        for range in scan_msg.ranges:
-            if math.isinf(range) or math.isnan(range) or range > scan_msg.range_max or range < scan_msg.range_min:
-                angle += scan_msg.angle_increment
-                continue
-            
-            x = range * math.cos(angle)
-            y = range * math.sin(angle)
-            points.append([x, y])
-            angle += scan_msg.angle_increment
-
-        return np.array(points, dtype=float)
+        ranges = np.array(scan_msg.ranges, dtype=float)
+        angles = (scan_msg.angle_min
+                  + np.arange(len(ranges)) * scan_msg.angle_increment)
+        valid = (np.isfinite(ranges)
+                 & (ranges >= scan_msg.range_min)
+                 & (ranges <= scan_msg.range_max))
+        r = ranges[valid]
+        a = angles[valid]
+        return np.column_stack((r * np.cos(a), r * np.sin(a)))
 
     def get_centroid(self, pts):
-        point_sum = np.sum(pts, axis=0)
-        return point_sum / float(len(pts))
-    
+        return pts.mean(axis=0)
+
     def get_matches(self, source_pts, distance_threshold=0.3):
-        matched_src = []
-        matched_tgt = []
-        for pt in source_pts:
-            dist, nearest_idx = self.prev_points_tree.query(pt.reshape(1, -1), k=1)
-            if dist[0][0] < distance_threshold:
-                matched_src.append(pt)
-                matched_tgt.append(self.prev_points_tree.data[nearest_idx[0][0]])
-        if len(matched_src) < 3:
+        dists, idxs = self.prev_points_tree.query(source_pts, k=1)
+        dists = dists[:, 0]
+        idxs = idxs[:, 0]
+        mask = dists < distance_threshold
+        if mask.sum() < 3:
             return None, None
-        return np.array(matched_src, dtype=float), np.array(matched_tgt, dtype=float)
+        matched_src = source_pts[mask]
+        matched_tgt = self.prev_points_tree.data[idxs[mask]]
+        return matched_src, matched_tgt
 
 def main(args=None):
     try:
