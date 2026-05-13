@@ -38,7 +38,7 @@ class OccupancyMapper(Node):
     def scan_callback(self, msg: LaserScan):
         try:
             odom_to_laser_tf = self.tf_buffer.lookup_transform(
-                'odom',                  
+                'lidar_odom',                  
                 msg.header.frame_id, # laser
                 rclpy.time.Time()
             )
@@ -126,7 +126,7 @@ class OccupancyMapper(Node):
     def publish_map(self):
         msg = OccupancyGrid()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'odom'
+        msg.header.frame_id = 'lidar_odom'
 
         msg.info.resolution = self.resolution
         msg.info.width = self.width
