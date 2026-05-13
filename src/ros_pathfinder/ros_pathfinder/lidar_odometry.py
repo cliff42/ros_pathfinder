@@ -25,6 +25,7 @@ class LidarOdometry(Node):
         self.odom_subscriber = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.prev_points_tree = None
+        self.prev_points = None
 
         # EKF STATE
         # mu is [x, y, theta]
@@ -110,6 +111,7 @@ class LidarOdometry(Node):
     def scan_callback(self, msg: LaserScan):
         points = self.scan_to_points(msg)
         if self.prev_points_tree is None:
+            self.prev_points = points
             self.prev_points_tree = KDTree(points, leaf_size=10)
             return
 
@@ -158,6 +160,7 @@ class LidarOdometry(Node):
             if np.linalg.norm(t) < CONVERGENCE_T and abs(math.atan2(R[1, 0], R[0, 0])) < CONVERGENCE_R:
                 break
 
+        self.prev_points = points
         self.prev_points_tree = KDTree(points, leaf_size=10)
 
         dtheta = math.atan2(R_total[1, 0], R_total[0, 0])
@@ -234,6 +237,8 @@ class LidarOdometry(Node):
                  & (ranges <= scan_msg.range_max))
         r = ranges[valid]
         a = angles[valid]
+        if r.size == 0:
+            return np.empty((0, 2), dtype=float)
         return np.column_stack((r * np.cos(a), r * np.sin(a)))
 
     def get_centroid(self, pts):
@@ -242,12 +247,12 @@ class LidarOdometry(Node):
     def get_matches(self, source_pts, distance_threshold=0.3):
         dists, idxs = self.prev_points_tree.query(source_pts, k=1)
         dists = dists[:, 0]
-        idxs = idxs[:, 0]
+        idxs = idxs[:, 0].astype(int)
         mask = dists < distance_threshold
         if mask.sum() < 3:
             return None, None
         matched_src = source_pts[mask]
-        matched_tgt = self.prev_points_tree.data[idxs[mask]]
+        matched_tgt = self.prev_points[idxs[mask]]
         return matched_src, matched_tgt
 
 def main(args=None):
