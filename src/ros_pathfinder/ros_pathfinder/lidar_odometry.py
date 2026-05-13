@@ -47,6 +47,10 @@ class LidarOdometry(Node):
 
         self.last_odom_time = None
 
+        self.odom_x = 0.0
+        self.odom_y = 0.0
+        self.odom_theta = 0.0
+
     # EKF predict step
     def odom_callback(self, msg: Odometry):
         now = rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
@@ -61,6 +65,13 @@ class LidarOdometry(Node):
         v = msg.twist.twist.linear.x   # linear velocity  (m/s)
         w = msg.twist.twist.angular.z  # angular velocity (rad/s)
         theta = self.mu[2]
+
+        # store latest wheel odom pose for the lidar_odom -> odom correction TF
+        self.odom_x = msg.pose.pose.position.x
+        self.odom_y = msg.pose.pose.position.y
+        qz = msg.pose.pose.orientation.z
+        qw = msg.pose.pose.orientation.w
+        self.odom_theta = math.atan2(2.0 * qw * qz, 1.0 - 2.0 * qz * qz)
 
         # propagate state with differential-drive motion model
         self.mu[0] += v * math.cos(theta) * dt # robot x pos
@@ -168,18 +179,24 @@ class LidarOdometry(Node):
 
         x, y, theta = self.mu[0], self.mu[1], self.mu[2]
 
+        # per REP-105 (https://www.ros.org/reps/rep-0105.html) we want to publish the correction between lidar_odom and odom
+        theta_corr = math.atan2(math.sin(theta - self.odom_theta),
+                                math.cos(theta - self.odom_theta))
+        c, s = math.cos(theta_corr), math.sin(theta_corr)
+        x_corr = x - (c * self.odom_x - s * self.odom_y)
+        y_corr = y - (s * self.odom_x + c * self.odom_y)
+
         tf = TransformStamped()
         tf.header.stamp = msg.header.stamp
-        tf.header.frame_id = HEADER_FRAME
-        tf.child_frame_id = CHILD_FRAME
-        tf.transform.translation.x = x
-        tf.transform.translation.y = y
+        tf.header.frame_id = HEADER_FRAME  # lidar_odom
+        tf.child_frame_id = 'odom'         # lidar_odom -> odom (correction on top of odom)
+        tf.transform.translation.x = x_corr
+        tf.transform.translation.y = y_corr
         tf.transform.translation.z = 0.0
-
         tf.transform.rotation.x = 0.0
         tf.transform.rotation.y = 0.0
-        tf.transform.rotation.z = math.sin(theta / 2.0)
-        tf.transform.rotation.w = math.cos(theta / 2.0)
+        tf.transform.rotation.z = math.sin(theta_corr / 2.0)
+        tf.transform.rotation.w = math.cos(theta_corr / 2.0)
 
         self.tf_broadcaster.sendTransform(tf)
 
@@ -191,7 +208,10 @@ class LidarOdometry(Node):
         odom.pose.pose.position.x = x
         odom.pose.pose.position.y = y
         odom.pose.pose.position.z = 0.0
-        odom.pose.pose.orientation = tf.transform.rotation
+        odom.pose.pose.orientation.x = 0.0
+        odom.pose.pose.orientation.y = 0.0
+        odom.pose.pose.orientation.z = math.sin(theta / 2.0)
+        odom.pose.pose.orientation.w = math.cos(theta / 2.0)
 
         # TODO: add later (do we need this?)
         odom.twist.twist.linear.x = 0.0
