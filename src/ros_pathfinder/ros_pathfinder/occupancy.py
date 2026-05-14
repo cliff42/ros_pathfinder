@@ -9,6 +9,7 @@ from tf2_ros import Buffer, TransformListener
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
 
 import math
+import time
 
 class OccupancyMapper(Node):
     def __init__(self):
@@ -28,6 +29,7 @@ class OccupancyMapper(Node):
 
         # 0 for unoccupied, 1 for occupied, -1 for unknown
         self.grid = [-1] * (self.width * self.height) # init grid to be all unknown
+        self.inflated_grid = [-1] * (self.width * self.height)
 
         self.timer_period = 10  # seconds
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
@@ -36,6 +38,7 @@ class OccupancyMapper(Node):
         self.publish_map()
         
     def scan_callback(self, msg: LaserScan):
+        start = time.time()
         try:
             odom_to_laser_tf = self.tf_buffer.lookup_transform(
                 'lidar_odom',                  
@@ -80,6 +83,15 @@ class OccupancyMapper(Node):
 
             angle += msg.angle_increment
 
+        #added
+        
+        self.inflated_grid = self.grid 
+        self.grid_inflate(3)
+        end = time.time()
+        duration = end - start
+        self.get_logger().info('Duration :"%s" seconds' % duration)
+
+
             
 
         # self.publish_map()
@@ -120,6 +132,35 @@ class OccupancyMapper(Node):
             if (error2 < dx):
                 error += dx
                 y += y_inc
+    ##TO DO: GET POINTS THAT ARE OCCUPIED AND SET POINTS X METERS AWAY FROM THOSE POINTS AS OCCUPIED AS WELL FOR BUFFER
+    def grid_inflate(self,radius):
+        top_diff_mul = -400
+        bottom_diff_mul = 400
+        left_diff_mul = -1
+        right_diff_mul = 1
+        #get list of self.grid indices that are occupied
+        indices = [i for i, x in enumerate(self.grid) if x == 100]
+        #for each point find points within radius and add to set
+        neighbors = []
+        for i in range(radius+1):
+            if i == 0:
+                for j in range(1,radius+1):
+                    neighbors.append(j)
+                    neighbors.append(-j)
+            else:
+                for j in range(radius+1):
+                    if j == 0:
+                        neighbors.append(top_diff_mul*i)
+                        neighbors.append(bottom_diff_mul*i)
+                    else:
+                        neighbors.append(top_diff_mul*i+j)
+                        neighbors.append(bottom_diff_mul*i+j)
+                        neighbors.append(top_diff_mul*i-j)
+                        neighbors.append(bottom_diff_mul*i-j)
+        for indx in indices:
+            for neighbor in neighbors:
+                if self.inflated_grid[indx+neighbor] != 100:
+                    self.inflated_grid[indx+neighbor] = 0
             
 
 
@@ -137,7 +178,8 @@ class OccupancyMapper(Node):
         msg.info.origin.position.z = 0.0
         msg.info.origin.orientation.w = 1.0
 
-        msg.data = self.grid
+        # msg.data = self.grid
+        msg.data = self.inflated_grid
 
         self.map_publisher.publish(msg)
 

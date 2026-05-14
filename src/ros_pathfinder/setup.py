@@ -33,7 +33,8 @@ setup(
             "occupancy = ros_pathfinder.occupancy:main",
             "localization = ros_pathfinder.localization:main",
             "lidar_odom = ros_pathfinder.lidar_odometry:main",
-            "planner = ros_pathfinder.planning_node:main"
+            "planner = ros_pathfinder.planning_node:main",
+            "test = ros_pathfinder.conversionTest:main"
         ],
     },
 )

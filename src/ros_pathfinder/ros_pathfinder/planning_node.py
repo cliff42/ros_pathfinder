@@ -55,7 +55,7 @@ class PathPlanner(Node):
 
         self.path_publisher = self.create_publisher(Path,"path",10)
         self.create_subscription(PoseStamped,"goal_pose",self.setGoal,10)
-        self.create_subscription(Odometry,"odom",self.setStart,10)
+        self.create_subscription(Odometry,"lidar_odom",self.setStart,10)
         self.create_subscription(OccupancyGrid,"map",self.planPath,10)
 
         self.resolution = 0.05
@@ -77,8 +77,7 @@ class PathPlanner(Node):
         if self.planner == "ASTAR":
             path = Path()
             # TODO: populate header
-            # path.header.stamp = msg.header.stamp
-            # path.header.frame_id = HEADER_FRAME
+            path.header.frame_id = 'lidar_odom'
 
             DIAG = 0.05*math.sqrt(2)
             neighbor_offsets = {-1:0.05,-401:DIAG,-400:0.05,-399:DIAG,1:0.05,401:DIAG,400:0.05,399:DIAG}
@@ -115,7 +114,7 @@ class PathPlanner(Node):
                                 f[adjacent] = new_cost + self.heuristic(adjacent,self.goal)
                                 came_from[adjacent] = current
                                 self.get_logger().info('Heap Push: Total Cost + Current: "%s","%s"' % (f[adjacent],adjacent))
-                                heapq.heappush(q,{f[adjacent],adjacent})
+                                heapq.heappush(q, (f[adjacent], adjacent))
         
 
         
@@ -222,15 +221,32 @@ class PathPlanner(Node):
             x = (c - 200) * 0.05
             pose = PoseStamped()
             # pose.header # TODO
+            pose.header._frame_id = 'lidar_odom'
             pose.pose.position.x = x
             pose.pose.position.y = y
-            pose.pose.position.z = 0
-            pose.pose.orientation.x = 0
-            pose.pose.orientation.y = 0
-            pose.pose.orientation.z = 0
-            pose.pose.orientation.w = 1
+            pose.pose.position.z = 0.0
+            pose.pose.orientation.x = 0.0
+            pose.pose.orientation.y = 0.0
+            pose.pose.orientation.z = 0.0
+            pose.pose.orientation.w = 1.0
             path.poses.append(pose)
-        path.append(goal)
+        goalPose = PoseStamped()
+        goalPose.header.frame_id = 'lidar_odom'
+        r,c = int(node/400), node % 400
+        y = (r - 200) * 0.05
+        x = (c - 200) * 0.05
+        goalPose.pose.position.x = x
+        goalPose.pose.position.y = y
+        goalPose.pose.position.z = 0.0
+        goalPose.pose.orientation.x = 0.0
+        goalPose.pose.orientation.y = 0.0
+        goalPose.pose.orientation.z = 0.0
+        goalPose.pose.orientation.w = 1.0
+        path.poses.append(goalPose)
+        
+
+        # goalPose = PoseStamped()
+        # path.append(goal)
         
         return path
 
