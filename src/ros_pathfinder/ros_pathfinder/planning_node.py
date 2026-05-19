@@ -259,6 +259,21 @@ def main(args=None):
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
 
+    # def _send_follow_path(self, path: Path):
+    #     if not self._action_client.wait_for_server(timeout_sec=0.0):
+    #         self.get_logger().warn('can't run')
+    #         return
+
+    #     goal_msg = FollowPath.Goal()
+    #     goal_msg.path = path
+
+    #     self._current_path_poses = list(path.poses)
+    #     self._current_wp_idx     = 0
+
+    #     send_future = self._action_client.send_goal_async(
+    #         goal_msg, feedback_callback=self._feedback_cb)
+    #     send_future.add_done_callback(self._goal_response_cb)
+
 
 if __name__ == '__main__':
     main()
