@@ -1,128 +1,91 @@
 #!/usr/bin/env python3
 
-import time
 import rclpy
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
-from rclpy.action import ActionServer
 from rclpy.callback_groups import ReentrantCallbackGroup
-from action_interfaces.action import MotorControl
-from std_msgs.msg import Float64, Float64MultiArray
-import math
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+from std_msgs.msg import Float64
 import threading
 
-class MotorControlServer(Node):
-    prev_angle_l = 0
-    prev_angle_r = 0
-    distance_l = 0
-    distance_r = 0
 
-    MOTOR_SPEED = 0.5 # TODO: placeholder for now
-    DISTANCE_TOLERANCE = 0.01
+class MotorControlServer(Node):
+    WHEELBASE     = 0.55        # distance between wheels
+    WHEEL_RADIUS  = 4 * 0.0254
+    MAX_WHEEL_VEL = 0.5         # TODO: measure based on hw
+    KP            = 1.5         # TODO: measure based on hw
 
     def __init__(self):
         super().__init__('controller_node')
-        self.cb_group = ReentrantCallbackGroup() # allow for concurrent callbacks
-        self.left_motor_publisher = self.create_publisher(Float64, 'left_motor', 10)
+        self.cb_group = ReentrantCallbackGroup()
+        self.left_motor_publisher  = self.create_publisher(Float64, 'left_motor',  10)
         self.right_motor_publisher = self.create_publisher(Float64, 'right_motor', 10)
-        self.imu_subscription = self.create_subscription(Float64MultiArray, 'test_topic', self.imu_listener_callback, 10, callback_group=self.cb_group)
         self.data_lock = threading.Lock()
-        self._action_server = ActionServer(
-            self,
-            MotorControl,
-            'motor_control',
-            self.execute_callback,
-            callback_group=self.cb_group)
 
+        self.create_subscription(Odometry, 'odom', self._odom_cb, 10,
+                                 callback_group=self.cb_group)
 
-    def execute_callback(self, goal_handle):
-        self.get_logger().info(f'Executing goal... {goal_handle.request.plan}')
-        starting_distance = self.distance_l # TODO: change to use combined distance
-        direction = goal_handle.request.plan[0]
-        distance_goal = goal_handle.request.plan[1]
+        self._cmd_vel = Twist()
+        self._last_cmd_time = self.get_clock().now()
+        self.CMD_VEL_TIMEOUT = 0.5  # seconds
+        self.create_subscription(Twist, 'cmd_vel', self._cmd_vel_cb, 10,
+                                 callback_group=self.cb_group)
+
+        # Measured wheel velocities (m/s), updated by _odom_cb
+        self._vel_l = 0.0
+        self._vel_r = 0.0
+
+        # 20 Hz control loop
+        self.create_timer(0.05, self._control_loop, callback_group=self.cb_group)
+
+    def _cmd_vel_cb(self, msg: Twist):
+        self._cmd_vel = msg
+        self._last_cmd_time = self.get_clock().now()
+
+    def _control_loop(self):
+        elapsed = (self.get_clock().now() - self._last_cmd_time).nanoseconds * 1e-9
+        if elapsed > self.CMD_VEL_TIMEOUT: # stop motors if no msg recieved for timeout seconds
+            self.publish_to_motors(0.0, 0.0)
+            return
+
+        v = self._cmd_vel.linear.x
+        w = self._cmd_vel.angular.z
+
+        # desired linear speeds
+        v_left  = v - w * self.WHEELBASE / 2.0
+        v_right = v + w * self.WHEELBASE / 2.0
 
         with self.data_lock:
-            start_l = self.distance_l
-            start_r = self.distance_r
+            err_l = v_left  - self._vel_l
+            err_r = v_right - self._vel_r
 
-        feedback_msg = MotorControl.Feedback()
-        
-        while rclpy.ok():
-            # catch case for cancelled request
-            if goal_handle.is_cancel_requested:
-                self.publish_to_motors(0.0, 0.0)
-                goal_handle.canceled()
-                return MotorControl.Result(success=False)
-            
-            with self.data_lock:
-                dl = self.distance_l - start_l
-                dr = self.distance_r - start_r
-            
-            progress = 0.5 * (dl + dr) # TODO: avg for now but should make this more complicated later
-            remaining = max(0.0, distance_goal - progress)
+        cmd_l = v_left  / self.MAX_WHEEL_VEL + self.KP * err_l / self.MAX_WHEEL_VEL
+        cmd_r = v_right / self.MAX_WHEEL_VEL + self.KP * err_r / self.MAX_WHEEL_VEL
+        self.publish_to_motors(cmd_l, cmd_r)
 
-            if remaining <= self.DISTANCE_TOLERANCE:
-                break
-                
-            self.publish_to_motors(self.MOTOR_SPEED, self.MOTOR_SPEED)
-            feedback_msg.distance_remaining = remaining
-            goal_handle.publish_feedback(feedback_msg)
-
-            self.get_logger().info('Feedback: {0}'.format(feedback_msg.distance_remaining))
-
-            # time.sleep(0.05) # TODO: update/ remove this -> should be same hz as publisher
-        
-        self.get_logger().info(f'here2... {self.distance_l - starting_distance }')
-        # stop motors after goal distance
-        self.publish_to_motors(0.0, 0.0)
-        goal_handle.succeed()
-        result = MotorControl.Result()
-        result.success = True
-        return result
-    
-    def imu_listener_callback(self, msg):
-        self.get_logger().info(f"here in callback: {msg}")
+    def _odom_cb(self, msg: Odometry):
+        v = msg.twist.twist.linear.x
+        w = msg.twist.twist.angular.z
         with self.data_lock:
-            angle_l = float(msg.data[0])
-            angle_r = float(msg.data[1])
-            self.distance_l, self.prev_angle_l = self.get_distance(angle_l,self.prev_angle_l,self.distance_l)
-            self.distance_r, self.prev_angle_r = self.get_distance(angle_r,self.prev_angle_r,self.distance_r)
-        self.get_logger().info(f"distance_l: {self.distance_l}")
-
-
-    def get_distance(self,angle,prev_angle, distance):
-        delta_angle = 0
-        if prev_angle > 270 and angle < 90:
-            delta_angle = angle + 360 - prev_angle
-        elif prev_angle < 90 and angle > 270:
-            delta_angle = 360 - angle + prev_angle
-        else:
-            delta_angle = angle - prev_angle
-        distance += (delta_angle/7) * (math.pi/180)*4*0.0254
-        prev_angle = angle
-        return distance, prev_angle
+            self._vel_l = v - w * self.WHEELBASE / 2.0
+            self._vel_r = v + w * self.WHEELBASE / 2.0
 
     def publish_to_motors(self, left_speed, right_speed):
-        left_msg = Float64()
-        left_msg.data = left_speed
-        right_msg = Float64()
-        right_msg.data = right_speed
+        left_speed  = max(-1.0, min(1.0, left_speed))
+        right_speed = max(-1.0, min(1.0, right_speed))
+        left_msg = Float64();  left_msg.data  = left_speed
+        right_msg = Float64(); right_msg.data = right_speed
         self.left_motor_publisher.publish(left_msg)
         self.right_motor_publisher.publish(right_msg)
 
-class ControllerNode(Node):
-    def __init__(self):
-        super().__init__("controller_node")
-        self.flag = True
-        #TODO
-        pass
 
 def main(args=None):
     try:
         with rclpy.init(args=args):
-            planner_action_server = MotorControlServer() # allow for running multiple callbacks in parallel
+            node = MotorControlServer()
             executor = MultiThreadedExecutor()
-            executor.add_node(planner_action_server)
+            executor.add_node(node)
             executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
