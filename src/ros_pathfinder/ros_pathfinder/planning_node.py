@@ -1,6 +1,8 @@
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.action import ActionClient, ActionServer
+from action_interfaces.action import FollowPath
 
 from geometry_msgs.msg import PoseStamped, Pose
 from nav_msgs.msg import Path, OccupancyGrid, Odometry
@@ -53,10 +55,14 @@ class PathPlanner(Node):
                 - List of PoseStamped
         '''
 
-        self.path_publisher = self.create_publisher(Path,"path",10)
-        self.create_subscription(PoseStamped,"goal_pose",self.setGoal,10)
+        
         self.create_subscription(Odometry,"lidar_odom",self.setStart,10)
         self.create_subscription(OccupancyGrid,"map",self.planPath,10)
+
+        self.create_subscription(PoseStamped,"goal_pose",self.setGoal,10)
+        self._action_client = ActionClient(self,FollowPath,'follow_path')
+
+        self.path_publisher = self.create_publisher(Path,"path",10)
 
         self.resolution = 0.05
 
@@ -101,6 +107,9 @@ class PathPlanner(Node):
                     self.get_logger().info('Publishing path Data: "%s"' % path)
                     self.path_publisher.publish(path)
                     path = None
+                    path_follower_goal = FollowPath.Goal()
+                    path_follower_goal.path = path
+                    self._action_client.send_goal_async(path_follower_goal)
                     break
                 for neighbor in neighbor_offsets:
                     self.get_logger().info('Current + Neighbor: "%s","%s"' % (current,neighbor))

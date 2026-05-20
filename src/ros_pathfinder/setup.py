@@ -34,7 +34,8 @@ setup(
             "localization = ros_pathfinder.localization:main",
             "lidar_odom = ros_pathfinder.lidar_odometry:main",
             "planner = ros_pathfinder.planning_node:main",
-            "test = ros_pathfinder.conversionTest:main"
+            "test = ros_pathfinder.conversionTest:main",
+            "path_follower = ros_pathfinder.path_follower:main"
         ],
     },
 )
