@@ -1,5 +1,4 @@
 import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.action import ActionClient, ActionServer
 from action_interfaces.action import FollowPath
@@ -13,6 +12,8 @@ import heapq
 import numpy as np
 from collections import deque
 import math
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 class PathPlanner(Node):
     def __init__(self):
@@ -98,21 +99,20 @@ class PathPlanner(Node):
             g = {self.start:start_g}
 
             while len(q) > 0:
-                self.get_logger().info('here')
                 total_cost,current = heapq.heappop(q)
-                self.get_logger().info('Heap Pop: Total Cost + Current: "%s","%s"' % (total_cost,current))
+                # self.get_logger().info('Heap Pop: Total Cost + Current: "%s","%s"' % (total_cost,current))
                 closed.add(current)
                 if current == self.goal:
                     path = self.path_list(path,current,came_from)
                     self.get_logger().info('Publishing path Data: "%s"' % path)
                     self.path_publisher.publish(path)
-                    path = None
                     path_follower_goal = FollowPath.Goal()
                     path_follower_goal.path = path
                     self._action_client.send_goal_async(path_follower_goal)
+                    path = None
                     break
                 for neighbor in neighbor_offsets:
-                    self.get_logger().info('Current + Neighbor: "%s","%s"' % (current,neighbor))
+                    # self.get_logger().info('Current + Neighbor: "%s","%s"' % (current,neighbor))
                     adjacent = current + neighbor
                     if occupancy_grid.data[adjacent] == 0 or occupancy_grid.data[adjacent] == -1:
                         cost = neighbor_offsets[neighbor]
@@ -122,7 +122,7 @@ class PathPlanner(Node):
                                 g[adjacent] = new_cost
                                 f[adjacent] = new_cost + self.heuristic(adjacent,self.goal)
                                 came_from[adjacent] = current
-                                self.get_logger().info('Heap Push: Total Cost + Current: "%s","%s"' % (f[adjacent],adjacent))
+                                # self.get_logger().info('Heap Push: Total Cost + Current: "%s","%s"' % (f[adjacent],adjacent))
                                 heapq.heappush(q, (f[adjacent], adjacent))
         
 

@@ -72,8 +72,8 @@ class MotorControlServer(Node):
             self._vel_r = v + w * self.WHEELBASE / 2.0
 
     def publish_to_motors(self, left_speed, right_speed):
-        left_speed  = max(-1.0, min(1.0, left_speed))
-        right_speed = max(-1.0, min(1.0, right_speed))
+        left_speed  = max(-0.2, min(0.2, left_speed))
+        right_speed = max(-0.2, min(0.2, right_speed))
         left_msg = Float64();  left_msg.data  = left_speed
         right_msg = Float64(); right_msg.data = right_speed
         self.left_motor_publisher.publish(left_msg)
