@@ -43,12 +43,22 @@ class MotorControlServer(Node):
         self._cmd_vel = msg
         self._last_cmd_time = self.get_clock().now()
 
+    def _odom_cb(self, msg: Odometry):
+        v = msg.twist.twist.linear.x
+        w = msg.twist.twist.angular.z
+        with self.data_lock:
+            self._vel_l = v - w * self.WHEELBASE / 2.0
+            self._vel_r = v + w * self.WHEELBASE / 2.0
+
+        # self.get_logger().info('left wheel speed: "%s" right wheel speed: "%s"' % (str(self._vel_l),str(self._vel_r)))
+
     def _control_loop(self):
         elapsed = (self.get_clock().now() - self._last_cmd_time).nanoseconds * 1e-9
         if elapsed > self.CMD_VEL_TIMEOUT: # stop motors if no msg recieved for timeout seconds
             self.publish_to_motors(0.0, 0.0)
             return
 
+        # 
         v = self._cmd_vel.linear.x
         w = self._cmd_vel.angular.z
 
@@ -60,16 +70,13 @@ class MotorControlServer(Node):
             err_l = v_left  - self._vel_l
             err_r = v_right - self._vel_r
 
+        self.get_logger().info('v: "%s" w:"%s" l_vel a: "%s" ex: "%s" er: "%s" r_vel ac: "%s" ex: "%s" er: "%s"' % (str(v),str(w),str(self._vel_l),str(v_left),str(err_l),str(self._vel_r),str(v_right),str(err_r)))
+
         cmd_l = v_left  / self.MAX_WHEEL_VEL + self.KP * err_l / self.MAX_WHEEL_VEL
         cmd_r = v_right / self.MAX_WHEEL_VEL + self.KP * err_r / self.MAX_WHEEL_VEL
         self.publish_to_motors(cmd_l, cmd_r)
 
-    def _odom_cb(self, msg: Odometry):
-        v = msg.twist.twist.linear.x
-        w = msg.twist.twist.angular.z
-        with self.data_lock:
-            self._vel_l = v - w * self.WHEELBASE / 2.0
-            self._vel_r = v + w * self.WHEELBASE / 2.0
+
 
     def publish_to_motors(self, left_speed, right_speed):
         left_speed  = max(-0.2, min(0.2, left_speed))
