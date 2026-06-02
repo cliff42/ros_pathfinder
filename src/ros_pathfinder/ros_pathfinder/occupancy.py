@@ -2,9 +2,8 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 from sensor_msgs.msg import LaserScan
-
 from tf2_ros import Buffer, TransformListener
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
 
@@ -15,13 +14,25 @@ import time
 class OccupancyMapper(Node):
     def __init__(self):
         super().__init__('occupancy_mapper')
+        self.map_frame = self.declare_parameter('map_frame', 'slam_odom').value
+        self.slam_odom_topic = self.declare_parameter('slam_odom_topic', 'slam_odom').value
+        self.base_frame = self.declare_parameter('base_frame', 'base_link').value
+
         self.map_publisher = self.create_publisher(OccupancyGrid, 'map', 10)
         self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
+        self.odom_subscriber = self.create_subscription(
+            Odometry,
+            self.slam_odom_topic,
+            self.odom_callback,
+            10
+        )
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        self.map_frame = self.declare_parameter('map_frame', 'lidar_odom').value # TODO: for full SLAM we likely want to switch this to the odom topic with ICP sensor fusion
+        self.robot_x = None
+        self.robot_y = None
+        self.robot_yaw = None
         
         self.resolution = 0.05 # m per cell
         self.width = 400 # num cells
@@ -48,26 +59,25 @@ class OccupancyMapper(Node):
 
     def timer_callback(self):
         self.publish_map()
+
+    def odom_callback(self, msg: Odometry):
+        self.robot_x = msg.pose.pose.position.x
+        self.robot_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        self.robot_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
         
     def scan_callback(self, msg: LaserScan):
         start = time.time()
-        try:
-            odom_to_laser_tf = self.tf_buffer.lookup_transform(
-                self.map_frame,
-                msg.header.frame_id, # laser
-                rclpy.time.Time()
-            )
-        except (LookupException, ConnectivityException, ExtrapolationException):
-            self.get_logger().warn('could not look up map->laser transform')
+
+        if self.robot_x is None:
+            self.get_logger().warn('waiting for slam_odom before mapping scans')
             return
-        
-        laser_x = odom_to_laser_tf.transform.translation.x
-        laser_y = odom_to_laser_tf.transform.translation.y
-        qx = odom_to_laser_tf.transform.rotation.x
-        qy = odom_to_laser_tf.transform.rotation.y
-        qz = odom_to_laser_tf.transform.rotation.z
-        qw = odom_to_laser_tf.transform.rotation.w
-        laser_yaw = math.atan2(2*(qw*qz + qx*qy), 1 - 2*(qy*qy + qz * qz))
+
+        laser_pose = self.laser_pose_in_map(msg.header.frame_id)
+        if laser_pose is None:
+            return
+
+        laser_x, laser_y, laser_yaw = laser_pose
 
         start_x, start_y = self.world_to_grid(laser_x, laser_y)
         if not self.in_bounds(start_x, start_y):
@@ -166,6 +176,37 @@ class OccupancyMapper(Node):
         index = self.grid_to_index(x, y)
         updated = self.log_odds[index] + log_odds_update
         self.log_odds[index] = max(self.log_odds_min, min(self.log_odds_max, updated))
+
+    def laser_pose_in_map(self, laser_frame):
+        try:
+            base_to_laser_tf = self.tf_buffer.lookup_transform(
+                self.base_frame,
+                laser_frame,
+                rclpy.time.Time()
+            ) # from lidar_static_transform.py (offset of lidar to base link)
+        except (LookupException, ConnectivityException, ExtrapolationException):
+            self.get_logger().warn('could not look up base link -> laser transform')
+            return None
+
+        laser_offset_x = base_to_laser_tf.transform.translation.x
+        laser_offset_y = base_to_laser_tf.transform.translation.y
+        q = base_to_laser_tf.transform.rotation
+        laser_yaw_offset = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
+
+        c = math.cos(self.robot_yaw)
+        s = math.sin(self.robot_yaw)
+
+        laser_x = self.robot_x + c * laser_offset_x - s * laser_offset_y
+        laser_y = self.robot_y + s * laser_offset_x + c * laser_offset_y
+        laser_yaw = self.robot_yaw + laser_yaw_offset
+
+        return laser_x, laser_y, laser_yaw
+
+    def yaw_from_quaternion(self, x, y, z, w):
+        return math.atan2(
+            2.0 * (w * z + x * y),
+            1.0 - 2.0 * (y * y + z * z)
+        )
 
     # map log odds occupancy to 100 or 0 # TODO: eventually we can use the probabilities directly
     def log_odds_to_occupancy_grid(self):

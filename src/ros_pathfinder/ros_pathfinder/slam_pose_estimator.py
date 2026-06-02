@@ -4,25 +4,26 @@ from rclpy.node import Node
 
 from nav_msgs.msg import Odometry
 from tf2_ros import TransformBroadcaster
-from geometry_msgs.msg import TransformStamped, Vector3
+from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import LaserScan
-from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
 
 import numpy as np
 from sklearn.neighbors import KDTree
 
 import math
 
-HEADER_FRAME = 'lidar_odom' # static world frame
+HEADER_FRAME = 'slam_odom' # corrected odometry frame from encoder prediction + lidar correction
 CHILD_FRAME = 'base_link' # robot frame
+RAW_ODOM_FRAME = 'raw_odom'
+
 
 class LidarOdometry(Node):
 
     def __init__(self):
         super().__init__('lidar_odometry')
-        self.lidar_odom_publisher = self.create_publisher(Odometry, 'lidar_odom', 10)
+        self.slam_odom_publisher = self.create_publisher(Odometry, 'slam_odom', 10)
         self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
-        self.odom_subscriber = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        self.odom_subscriber = self.create_subscription(Odometry, 'raw_odom', self.odom_callback, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.prev_points_tree = None
         self.prev_points = None
@@ -47,6 +48,8 @@ class LidarOdometry(Node):
         self.icp_theta = 0.0
 
         self.last_odom_time = None
+        self.latest_odom_pose = None
+        self.prev_scan_odom_pose = None
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -61,22 +64,19 @@ class LidarOdometry(Node):
         now = rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
         if self.last_odom_time is None:
             self.last_odom_time = now
+            self.store_latest_odom_pose(msg)
             return
         dt = now - self.last_odom_time
         self.last_odom_time = now
         if dt <= 0.0:
+            self.store_latest_odom_pose(msg)
             return
 
         v = msg.twist.twist.linear.x   # linear velocity  (m/s)
         w = msg.twist.twist.angular.z  # angular velocity (rad/s)
         theta = self.mu[2]
 
-        # store latest wheel odom pose for the lidar_odom -> odom correction TF
-        self.odom_x = msg.pose.pose.position.x
-        self.odom_y = msg.pose.pose.position.y
-        qz = msg.pose.pose.orientation.z
-        qw = msg.pose.pose.orientation.w
-        self.odom_theta = math.atan2(2.0 * qw * qz, 1.0 - 2.0 * qz * qz)
+        self.store_latest_odom_pose(msg)
 
         # propagate state with differential-drive motion model
         self.mu[0] += v * math.cos(theta) * dt # robot x pos
@@ -96,8 +96,8 @@ class LidarOdometry(Node):
 
         corr_tf = TransformStamped()
         corr_tf.header.stamp = msg.header.stamp
-        corr_tf.header.frame_id = HEADER_FRAME  # lidar_odom
-        corr_tf.child_frame_id = 'odom'
+        corr_tf.header.frame_id = HEADER_FRAME
+        corr_tf.child_frame_id = RAW_ODOM_FRAME
         corr_tf.transform.translation.x = self.corr_x
         corr_tf.transform.translation.y = self.corr_y
         corr_tf.transform.translation.z = 0.0
@@ -110,18 +110,23 @@ class LidarOdometry(Node):
     # EKF update/ correction step
     def scan_callback(self, msg: LaserScan):
         points = self.scan_to_points(msg)
+        if points.shape[0] < 3:
+            return
+
         if self.prev_points_tree is None:
             self.prev_points = points
             self.prev_points_tree = KDTree(points, leaf_size=10)
+            if self.latest_odom_pose is not None:
+                self.prev_scan_odom_pose = self.latest_odom_pose.copy()
             return
 
         MAX_ITER = 10
         CONVERGENCE_T = 1e-4
         CONVERGENCE_R = 1e-5
 
-        R_total = np.eye(2)
-        t_total = np.zeros(2)
-        source_pts = points.copy()
+        odom_delta = self.get_scan_to_scan_odom_delta()
+        R_total, t_total = self.pose_to_matrix(odom_delta)
+        source_pts = self.transform_points(points, R_total, t_total)
 
         # iteration loop for ICP
         for _ in range(MAX_ITER):
@@ -154,7 +159,7 @@ class LidarOdometry(Node):
             R_total = R @ R_total
 
             # apply to source for next iteration
-            source_pts = (R @ source_pts.T).T + t
+            source_pts = self.transform_points(points, R_total, t_total)
 
             # convergence check
             if np.linalg.norm(t) < CONVERGENCE_T and abs(math.atan2(R[1, 0], R[0, 0])) < CONVERGENCE_R:
@@ -162,12 +167,14 @@ class LidarOdometry(Node):
 
         self.prev_points = points
         self.prev_points_tree = KDTree(points, leaf_size=10)
+        if self.latest_odom_pose is not None:
+            self.prev_scan_odom_pose = self.latest_odom_pose.copy()
 
         dtheta = math.atan2(R_total[1, 0], R_total[0, 0])
         dx = float(t_total[0])
         dy = float(t_total[1])
 
-        # minimum motion threshold (don't update EFK when stationary)
+        # minimum motion threshold (don't update EKF when stationary)
         MIN_T = 1e-3
         MIN_R = 5e-4
         if abs(dx) > MIN_T or abs(dy) > MIN_T or abs(dtheta) > MIN_R:
@@ -189,7 +196,7 @@ class LidarOdometry(Node):
             innovation = z - self.mu # innovation is diff between ICP measurement and current mu location
             innovation[2] = math.atan2(math.sin(innovation[2]), math.cos(innovation[2]))
 
-            S = self.P + self.R_meas # TODO: when implementing SLAM actually incorperate the observation matrix
+            S = self.P + self.R_meas # TODO: when implementing SLAM actually incorporate the observation matrix
             K = self.P @ np.linalg.inv(S) # kalman gain
 
             self.mu = self.mu + K @ innovation
@@ -198,7 +205,7 @@ class LidarOdometry(Node):
 
         x, y, theta = self.mu[0], self.mu[1], self.mu[2]
 
-        # Recompute and store the lidar_odom→odom correction so odom_callback
+        # Recompute and store the slam_odom->raw_odom correction so odom_callback
         # can re-publish it at 50 Hz to keep the TF buffer fresh.
         theta_corr = math.atan2(math.sin(theta - self.odom_theta),
                                 math.cos(theta - self.odom_theta))
@@ -225,8 +232,47 @@ class LidarOdometry(Node):
         odom.twist.twist.linear.y = 0.0
         odom.twist.twist.angular.z = 0.0
 
-        self.lidar_odom_publisher.publish(odom)
-            
+        self.slam_odom_publisher.publish(odom)
+
+    def store_latest_odom_pose(self, msg):
+        self.odom_x = msg.pose.pose.position.x
+        self.odom_y = msg.pose.pose.position.y
+        qz = msg.pose.pose.orientation.z
+        qw = msg.pose.pose.orientation.w
+        self.odom_theta = math.atan2(2.0 * qw * qz, 1.0 - 2.0 * qz * qz)
+        self.latest_odom_pose = np.array([self.odom_x, self.odom_y, self.odom_theta])
+
+    def get_scan_to_scan_odom_delta(self):
+        if self.prev_scan_odom_pose is None or self.latest_odom_pose is None:
+            return np.zeros(3)
+        return self.relative_pose(self.prev_scan_odom_pose, self.latest_odom_pose)
+
+    # convert global diff into robot local frame
+    def relative_pose(self, previous_pose, current_pose):
+        dx = current_pose[0] - previous_pose[0]
+        dy = current_pose[1] - previous_pose[1]
+        theta = previous_pose[2]
+
+        c = math.cos(theta)
+        s = math.sin(theta)
+
+        local_dx = c * dx + s * dy
+        local_dy = -s * dx + c * dy
+        local_dtheta = math.atan2(
+            math.sin(current_pose[2] - previous_pose[2]),
+            math.cos(current_pose[2] - previous_pose[2])
+        )
+        return np.array([local_dx, local_dy, local_dtheta])
+
+    def pose_to_matrix(self, pose):
+        c = math.cos(pose[2])
+        s = math.sin(pose[2])
+        R = np.array([[c, -s], [s, c]]) # rot matrix
+        t = np.array([pose[0], pose[1]]) # translation vector
+        return R, t
+
+    def transform_points(self, points, R, t):
+        return (R @ points.T).T + t
 
     def scan_to_points(self, scan_msg):
         ranges = np.array(scan_msg.ranges, dtype=float)
@@ -255,6 +301,7 @@ class LidarOdometry(Node):
         matched_tgt = self.prev_points[idxs[mask]]
         return matched_src, matched_tgt
 
+
 def main(args=None):
     try:
         with rclpy.init(args=args):
@@ -266,4 +313,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-

@@ -40,7 +40,7 @@ class OdometryPublisher(Node):
 
     def __init__(self):
         super().__init__('odometry_publisher')
-        self.odom_publisher = self.create_publisher(Odometry, 'odom', 10)
+        self.odom_publisher = self.create_publisher(Odometry, 'raw_odom', 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.timer_period = 0.02
         self.timer = self.create_timer(self.timer_period, self.odom_callback)
