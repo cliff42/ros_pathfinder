@@ -2,7 +2,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from nav_msgs.msg import OccupancyGrid, MapMetaData # https://docs.ros.org/en/noetic/api/nav_msgs/html/msg/OccupancyGrid.html
+from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
 
 from tf2_ros import Buffer, TransformListener
@@ -11,14 +11,17 @@ from tf2_ros import LookupException, ConnectivityException, ExtrapolationExcepti
 import math
 import time
 
+
 class OccupancyMapper(Node):
     def __init__(self):
         super().__init__('occupancy_mapper')
         self.map_publisher = self.create_publisher(OccupancyGrid, 'map', 10)
-        self.scan_subscriber = self.create_subscription(LaserScan,'scan', self.scan_callback, 10)
+        self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        self.map_frame = self.declare_parameter('map_frame', 'lidar_odom').value # TODO: for full SLAM we likely want to switch this to the odom topic with ICP sensor fusion
         
         self.resolution = 0.05 # m per cell
         self.width = 400 # num cells
@@ -27,11 +30,20 @@ class OccupancyMapper(Node):
         self.origin_x = -(self.width * self.resolution) / 2.0
         self.origin_y = -(self.height * self.resolution) / 2.0
 
-        # 0 for unoccupied, 1 for occupied, -1 for unknown
-        self.grid = [-1] * (self.width * self.height) # init grid to be all unknown
-        self.inflated_grid = [-1] * (self.width * self.height)
+        # log odds stores belief that cell is occupied
+        self.log_odds = [0.0] * (self.width * self.height)
+        self.log_odds_free = self.probability_to_log_odds(0.35)
+        self.log_odds_occupied = self.probability_to_log_odds(0.70)
+        self.log_odds_min = self.probability_to_log_odds(0.10)
+        self.log_odds_max = self.probability_to_log_odds(0.95)
+        self.free_threshold = self.probability_to_log_odds(0.40)
+        self.occupied_threshold = self.probability_to_log_odds(0.65)
 
-        self.timer_period = 10  # seconds
+        self.grid = [-1] * (self.width * self.height)
+        self.inflated_grid = [-1] * (self.width * self.height)
+        self.inflation_radius_cells = 3
+
+        self.timer_period = 1.0  # seconds
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
 
     def timer_callback(self):
@@ -41,15 +53,14 @@ class OccupancyMapper(Node):
         start = time.time()
         try:
             odom_to_laser_tf = self.tf_buffer.lookup_transform(
-                'lidar_odom',                  
+                self.map_frame,
                 msg.header.frame_id, # laser
                 rclpy.time.Time()
             )
         except (LookupException, ConnectivityException, ExtrapolationException):
-            self.get_logger().warn('could not look up odom->laser transform')
+            self.get_logger().warn('could not look up map->laser transform')
             return
         
-        self.grid = [-1] * (self.width * self.height) # reset map
         laser_x = odom_to_laser_tf.transform.translation.x
         laser_y = odom_to_laser_tf.transform.translation.y
         qx = odom_to_laser_tf.transform.rotation.x
@@ -57,6 +68,11 @@ class OccupancyMapper(Node):
         qz = odom_to_laser_tf.transform.rotation.z
         qw = odom_to_laser_tf.transform.rotation.w
         laser_yaw = math.atan2(2*(qw*qz + qx*qy), 1 - 2*(qy*qy + qz * qz))
+
+        start_x, start_y = self.world_to_grid(laser_x, laser_y)
+        if not self.in_bounds(start_x, start_y):
+            self.get_logger().warn('laser origin is outside the occupancy grid')
+            return
 
         angle = msg.angle_min
 
@@ -73,30 +89,20 @@ class OccupancyMapper(Node):
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
             # convert to grid coords
-            scan_x = int((scan_x - self.origin_x) / self.resolution)
-            scan_y = int((scan_y- self.origin_y) / self.resolution)
+            scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
 
-            start_x = int((laser_x - self.origin_x) / self.resolution)
-            start_y = int((laser_y - self.origin_y) / self.resolution)
-
-            self.bresenham(start_x, start_y, scan_x, scan_y)
+            self.update_ray(start_x, start_y, scan_x, scan_y)
 
             angle += msg.angle_increment
 
-        #added
-        
-        self.inflated_grid = self.grid 
-        self.grid_inflate(3)
+        self.grid = self.log_odds_to_occupancy_grid()
+        self.inflated_grid = self.inflate_occupied_cells(self.grid, self.inflation_radius_cells)
         end = time.time()
         duration = end - start
         self.get_logger().info('Duration :"%s" seconds' % duration)
 
-
-            
-
-        # self.publish_map()
-
-    def bresenham(self, start_x, start_y, scan_x, scan_y):
+    def update_ray(self, start_x, start_y, scan_x, scan_y):
+        # bresenham's algorithm
         dx = abs(scan_x - start_x)
         dy = abs(scan_y - start_y)
 
@@ -116,11 +122,14 @@ class OccupancyMapper(Node):
         error = dx - dy
 
         while(True):
-            if x == scan_x and y == scan_y:
-                self.grid[scan_x + scan_y * self.width] = 100 # occupied
+            if not self.in_bounds(x, y):
                 break
 
-            self.grid[x + y * self.width] = 0 # unoccupied   
+            if x == scan_x and y == scan_y:
+                self.update_cell(x, y, self.log_odds_occupied)
+                break
+
+            self.update_cell(x, y, self.log_odds_free)
             error2 = 2 * error # to avoid checking float
 
             # move in x dir
@@ -132,42 +141,68 @@ class OccupancyMapper(Node):
             if (error2 < dx):
                 error += dx
                 y += y_inc
-    ##TO DO: GET POINTS THAT ARE OCCUPIED AND SET POINTS X METERS AWAY FROM THOSE POINTS AS OCCUPIED AS WELL FOR BUFFER
-    def grid_inflate(self,radius):
-        top_diff_mul = -400
-        bottom_diff_mul = 400
-        left_diff_mul = -1
-        right_diff_mul = 1
-        #get list of self.grid indices that are occupied
-        indices = [i for i, x in enumerate(self.grid) if x == 100]
-        #for each point find points within radius and add to set
-        neighbors = []
-        for i in range(radius+1):
-            if i == 0:
-                for j in range(1,radius+1):
-                    neighbors.append(j)
-                    neighbors.append(-j)
-            else:
-                for j in range(radius+1):
-                    if j == 0:
-                        neighbors.append(top_diff_mul*i)
-                        neighbors.append(bottom_diff_mul*i)
-                    else:
-                        neighbors.append(top_diff_mul*i+j)
-                        neighbors.append(bottom_diff_mul*i+j)
-                        neighbors.append(top_diff_mul*i-j)
-                        neighbors.append(bottom_diff_mul*i-j)
-        for indx in indices:
-            for neighbor in neighbors:
-                if self.inflated_grid[indx+neighbor] != 100:
-                    self.inflated_grid[indx+neighbor] = 0
-            
 
+    def probability_to_log_odds(self, probability):
+        return math.log(probability / (1.0 - probability))
+
+    def log_odds_to_probability(self, log_odds):
+        return 1.0 - (1.0 / (1.0 + math.exp(log_odds)))
+
+    def world_to_grid(self, x, y):
+        grid_x = int((x - self.origin_x) / self.resolution)
+        grid_y = int((y - self.origin_y) / self.resolution)
+        return grid_x, grid_y
+
+    def grid_to_index(self, x, y):
+        return x + y * self.width
+
+    def in_bounds(self, x, y):
+        return 0 <= x < self.width and 0 <= y < self.height
+
+    def update_cell(self, x, y, log_odds_update):
+        if not self.in_bounds(x, y):
+            return
+
+        index = self.grid_to_index(x, y)
+        updated = self.log_odds[index] + log_odds_update
+        self.log_odds[index] = max(self.log_odds_min, min(self.log_odds_max, updated))
+
+    # map log odds occupancy to 100 or 0 # TODO: eventually we can use the probabilities directly
+    def log_odds_to_occupancy_grid(self):
+        grid = []
+        for cell_log_odds in self.log_odds:
+            if cell_log_odds <= self.free_threshold:
+                grid.append(0)
+            elif cell_log_odds >= self.occupied_threshold:
+                grid.append(100)
+            else:
+                grid.append(-1)
+        return grid
+
+    def inflate_occupied_cells(self, grid, radius):
+        inflated_grid = list(grid)
+        occupied_indices = [i for i, value in enumerate(grid) if value >= 65]
+
+        for index in occupied_indices:
+            center_x = index % self.width
+            center_y = index // self.width
+
+            for dy in range(-radius, radius + 1):
+                for dx in range(-radius, radius + 1):
+                    if dx * dx + dy * dy > radius * radius:
+                        continue
+
+                    x = center_x + dx
+                    y = center_y + dy
+                    if self.in_bounds(x, y):
+                        inflated_grid[self.grid_to_index(x, y)] = 100
+
+        return inflated_grid
 
     def publish_map(self):
         msg = OccupancyGrid()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'lidar_odom'
+        msg.header.frame_id = self.map_frame
 
         msg.info.resolution = self.resolution
         msg.info.width = self.width
