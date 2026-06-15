@@ -30,7 +30,7 @@ class OccupancyMapper(Node):
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
 
-        self.map_publisher = self.create_publisher(OccupancyGrid, 'map', map_qos)
+        self.map_publisher = self.create_publisher(OccupancyGrid, '/map', map_qos)
         self.scan_subscriber = self.create_subscription(
             LaserScan,
             'scan',
@@ -65,7 +65,6 @@ class OccupancyMapper(Node):
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
 
     def timer_callback(self):
-        self.get_logger().info('Publishing Map')
         self.publish_map()
 
     def scan_callback(self, msg: LaserScan):
@@ -251,6 +250,12 @@ class OccupancyMapper(Node):
         msg.data = self.inflated_grid
 
         self.map_publisher.publish(msg)
+        self.get_logger().info(
+            f'Published /map: subscribers={self.map_publisher.get_subscription_count()}, '
+            f'frame={msg.header.frame_id}, cells={len(msg.data)}, '
+            f'free={msg.data.count(0)}, occupied={msg.data.count(100)}, '
+            f'unknown={msg.data.count(-1)}'
+        )
 
 def main(args=None):
     try:
