@@ -59,6 +59,11 @@ class LidarOdometry(Node):
         self.corr_y = 0.0
         self.corr_theta = 0.0
 
+        # Last commanded/measured odom velocities after deadbanding.
+        # Used by scan_callback to reject stationary ICP noise.
+        self.last_v = 0.0
+        self.last_w = 0.0
+
     # EKF predict step
     def odom_callback(self, msg: Odometry):
         now = rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
@@ -74,7 +79,20 @@ class LidarOdometry(Node):
 
         v = msg.twist.twist.linear.x   # linear velocity  (m/s)
         w = msg.twist.twist.angular.z  # angular velocity (rad/s)
+
+        # Treat tiny encoder/odom jitter as zero so it cannot integrate forever.
+        V_DEADBAND = 0.005  # m/s
+        W_DEADBAND = 0.005  # rad/s
+        if abs(v) < V_DEADBAND:
+            v = 0.0
+        if abs(w) < W_DEADBAND:
+            w = 0.0
+
         theta = self.mu[2]
+
+        # Store deadbanded velocities for logging and stationary ICP rejection.
+        self.last_v = v
+        self.last_w = w
 
         self.store_latest_odom_pose(msg)
 
@@ -91,8 +109,15 @@ class LidarOdometry(Node):
             [0.0, 0.0,  1.0]
         ])
 
-        # grow covariance with process (encoder) noise
-        self.P = F @ self.P @ F.T + self.Q
+        # Grow covariance with process (encoder) noise.
+        # self.Q is interpreted as noise per second, so scale by dt.
+        # While stationary, keep process noise very small so the EKF does not
+        # become eager to trust tiny noisy ICP corrections.
+        if v == 0.0 and w == 0.0:
+            Q = np.diag([1e-6, 1e-6, 1e-7])
+        else:
+            Q = self.Q * dt
+        self.P = F @ self.P @ F.T + Q
 
         corr_tf = TransformStamped()
         corr_tf.header.stamp = msg.header.stamp
@@ -174,10 +199,30 @@ class LidarOdometry(Node):
         dx = float(t_total[0])
         dy = float(t_total[1])
 
-        # minimum motion threshold (don't update EKF when stationary)
-        MIN_T = 1e-3
-        MIN_R = 5e-4
-        if abs(dx) > MIN_T or abs(dy) > MIN_T or abs(dtheta) > MIN_R:
+        self.get_logger().info(
+            f"v={self.last_v:.5f}, w={self.last_w:.5f}, "
+            f"icp_dx={dx:.5f}, icp_dy={dy:.5f}, icp_dtheta={dtheta:.5f}, "
+            f"odom=({self.odom_x:.3f}, {self.odom_y:.3f}, {self.odom_theta:.3f}), "
+            f"mu=({self.mu[0]:.3f}, {self.mu[1]:.3f}, {self.mu[2]:.3f})"
+        )
+
+        # If odom says the robot is stationary, do not let scan-to-scan ICP
+        # accumulate LaserScan jitter as fake motion. We already updated
+        # prev_points above, so the next scan still compares against the most
+        # recent scan.
+        STILL_V = 0.005  # m/s
+        STILL_W = 0.005  # rad/s
+        if abs(self.last_v) < STILL_V and abs(self.last_w) < STILL_W:
+            self.get_logger().info(
+                f"STATIONARY: rejecting ICP dx={dx:.5f}, "
+                f"dy={dy:.5f}, dtheta={dtheta:.5f}"
+            )
+            return
+
+        # Minimum accepted ICP motion once the robot is actually moving.
+        MIN_T = 0.01   # 1 cm
+        MIN_R = 0.005  # ~0.29 degrees
+        if math.hypot(dx, dy) > MIN_T or abs(dtheta) > MIN_R:
             # advance the independent ICP pose accumulator to form measurement z
             c_icp = math.cos(self.icp_theta)
             s_icp = math.sin(self.icp_theta)

@@ -58,6 +58,7 @@ class OccupancyMapper(Node):
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
 
     def timer_callback(self):
+        self.get_logger().info('Publishing Map')
         self.publish_map()
 
     def odom_callback(self, msg: Odometry):
