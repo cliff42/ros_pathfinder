@@ -14,7 +14,8 @@ class MotorControlServer(Node):
     WHEELBASE     = 0.55        # distance between wheels
     WHEEL_RADIUS  = 4 * 0.0254
     MAX_WHEEL_VEL = 0.5         # TODO: measure based on hw
-    KP            = 1.5         # TODO: measure based on hw
+    MAX_MOTOR_CMD = 0.2
+    KP            = 0.4         # motor command per m/s of wheel-speed error
 
     def __init__(self):
         super().__init__('controller_node')
@@ -72,15 +73,30 @@ class MotorControlServer(Node):
 
         self.get_logger().info('v: "%s" w:"%s" l_vel a: "%s" ex: "%s" er: "%s" r_vel ac: "%s" ex: "%s" er: "%s"' % (str(v),str(w),str(self._vel_l),str(v_left),str(err_l),str(self._vel_r),str(v_right),str(err_r)))
 
-        cmd_l = v_left  / self.MAX_WHEEL_VEL + self.KP * err_l / self.MAX_WHEEL_VEL
-        cmd_r = v_right / self.MAX_WHEEL_VEL + self.KP * err_r / self.MAX_WHEEL_VEL
+        cmd_l = self.wheel_command(v_left, err_l)
+        cmd_r = self.wheel_command(v_right, err_r)
         self.publish_to_motors(cmd_l, cmd_r)
+
+    def wheel_command(self, desired_velocity, velocity_error):
+        if abs(desired_velocity) < 1e-3:
+            return 0.0
+
+        feedforward = (desired_velocity / self.MAX_WHEEL_VEL) * self.MAX_MOTOR_CMD
+        correction = self.KP * velocity_error
+        command = feedforward + correction
+
+        if desired_velocity > 0.0:
+            command = max(0.0, command)
+        else:
+            command = min(0.0, command)
+
+        return command
 
 
 
     def publish_to_motors(self, left_speed, right_speed):
-        left_speed  = max(-0.2, min(0.2, left_speed))
-        right_speed = max(-0.2, min(0.2, right_speed))
+        left_speed  = max(-self.MAX_MOTOR_CMD, min(self.MAX_MOTOR_CMD, left_speed))
+        right_speed = max(-self.MAX_MOTOR_CMD, min(self.MAX_MOTOR_CMD, right_speed))
         left_msg = Float64();  left_msg.data  = left_speed
         right_msg = Float64(); right_msg.data = right_speed
         self.left_motor_publisher.publish(left_msg)

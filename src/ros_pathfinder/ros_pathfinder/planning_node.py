@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.action import ActionClient, ActionServer
+from rclpy.action import ActionClient
 from action_interfaces.action import FollowPath
 
 from geometry_msgs.msg import PoseStamped, Pose
@@ -58,10 +58,11 @@ class PathPlanner(Node):
 
         
         self.create_subscription(Odometry,"slam_odom",self.setStart,10)
-        self.create_subscription(OccupancyGrid,"map",self.planPath,10)
+        self.create_subscription(OccupancyGrid,"/map",self.planPath,10)
 
         self.create_subscription(PoseStamped,"goal_pose",self.setGoal,10)
         self._action_client = ActionClient(self,FollowPath,'follow_path')
+        self.path_goal_in_flight = False
 
         self.path_publisher = self.create_publisher(Path,"path",10)
 
@@ -72,6 +73,8 @@ class PathPlanner(Node):
     def planPath(self, occupancy_grid: OccupancyGrid):
         # wait until we have a goal & have odom data
         if self.start == None or self.goal == None:
+            return
+        if self.path_goal_in_flight:
             return
 
         self.get_logger().info('start: "%s", goal: "%s"' % (self.start, self.goal))
@@ -106,10 +109,7 @@ class PathPlanner(Node):
                     path = self.path_list(path,current,came_from)
                     self.get_logger().info('Publishing path Data: "%s"' % path)
                     self.path_publisher.publish(path)
-                    path_follower_goal = FollowPath.Goal()
-                    path_follower_goal.path = path
-                    self._action_client.send_goal_async(path_follower_goal)
-                    path = None
+                    self.send_follow_path(path)
                     break
                 for neighbor in neighbor_offsets:
                     # self.get_logger().info('Current + Neighbor: "%s","%s"' % (current,neighbor))
@@ -192,6 +192,7 @@ class PathPlanner(Node):
     def setGoal(self, pose: PoseStamped):
         indx = self.convertToGrid(pose.pose)
         self.goal = indx
+        self.path_goal_in_flight = False
     def setStart(self, odom: Odometry):
         indx = self.convertToGrid(odom.pose.pose)
         self.start = indx
@@ -216,14 +217,15 @@ class PathPlanner(Node):
         return h
 
     def path_list(self,path,goal,came_from):
-        path_list = []
+        path_nodes = []
         node = goal
-        
-        while came_from[node] is not None:
+
+        while node is not None:
+            path_nodes.append(node)
             node = came_from[node]
-            path_list.append(node)
-        path_list.reverse()
-        for node in path_list:
+        path_nodes.reverse()
+
+        for node in path_nodes:
             #convert node to cartesian coordinates
             r,c = int(node/400), node % 400
             y = (r - 200) * 0.05
@@ -239,25 +241,39 @@ class PathPlanner(Node):
             pose.pose.orientation.z = 0.0
             pose.pose.orientation.w = 1.0
             path.poses.append(pose)
-        goalPose = PoseStamped()
-        goalPose.header.frame_id = 'slam_odom'
-        r,c = int(node/400), node % 400
-        y = (r - 200) * 0.05
-        x = (c - 200) * 0.05
-        goalPose.pose.position.x = x
-        goalPose.pose.position.y = y
-        goalPose.pose.position.z = 0.0
-        goalPose.pose.orientation.x = 0.0
-        goalPose.pose.orientation.y = 0.0
-        goalPose.pose.orientation.z = 0.0
-        goalPose.pose.orientation.w = 1.0
-        path.poses.append(goalPose)
-        
 
-        # goalPose = PoseStamped()
-        # path.append(goal)
-        
         return path
+
+    def send_follow_path(self, path):
+        if not self._action_client.wait_for_server(timeout_sec=0.1):
+            self.get_logger().warn('follow_path action server is not available')
+            return
+
+        goal_msg = FollowPath.Goal()
+        goal_msg.path = path
+        self.path_goal_in_flight = True
+        future = self._action_client.send_goal_async(goal_msg)
+        future.add_done_callback(self.follow_path_goal_response)
+
+    def follow_path_goal_response(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().warn('follow_path goal rejected')
+            self.path_goal_in_flight = False
+            return
+
+        self.get_logger().info('follow_path goal accepted')
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self.follow_path_result)
+
+    def follow_path_result(self, future):
+        result = future.result().result
+        self.get_logger().info(
+            f'follow_path result: success={result.success}, message="{result.message}"'
+        )
+        self.path_goal_in_flight = False
+        if result.success:
+            self.goal = None
 
 
 def main(args=None):
@@ -339,7 +355,6 @@ Exploration
 3. Select next point to travel to (could be closest frontier cluster or largest frontier cluster)
 4. Repeat until no frontier clusters are left (room is fully explored)
 '''
-
 
 
 
