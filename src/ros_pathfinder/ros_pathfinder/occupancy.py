@@ -2,7 +2,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
-from nav_msgs.msg import OccupancyGrid, Odometry
+from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
 from tf2_ros import Buffer, TransformListener
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
@@ -15,24 +15,12 @@ class OccupancyMapper(Node):
     def __init__(self):
         super().__init__('occupancy_mapper')
         self.map_frame = self.declare_parameter('map_frame', 'slam_odom').value
-        self.slam_odom_topic = self.declare_parameter('slam_odom_topic', 'slam_odom').value
-        self.base_frame = self.declare_parameter('base_frame', 'base_link').value
 
         self.map_publisher = self.create_publisher(OccupancyGrid, 'map', 10)
         self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
-        self.odom_subscriber = self.create_subscription(
-            Odometry,
-            self.slam_odom_topic,
-            self.odom_callback,
-            10
-        )
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-
-        self.robot_x = None
-        self.robot_y = None
-        self.robot_yaw = None
         
         self.resolution = 0.05 # m per cell
         self.width = 400 # num cells
@@ -61,18 +49,8 @@ class OccupancyMapper(Node):
         self.get_logger().info('Publishing Map')
         self.publish_map()
 
-    def odom_callback(self, msg: Odometry):
-        self.robot_x = msg.pose.pose.position.x
-        self.robot_y = msg.pose.pose.position.y
-        q = msg.pose.pose.orientation
-        self.robot_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
-        
     def scan_callback(self, msg: LaserScan):
         start = time.time()
-
-        if self.robot_x is None:
-            self.get_logger().warn('waiting for slam_odom before mapping scans')
-            return
 
         laser_pose = self.laser_pose_in_map(msg.header.frame_id)
         if laser_pose is None:
@@ -180,26 +158,21 @@ class OccupancyMapper(Node):
 
     def laser_pose_in_map(self, laser_frame):
         try:
-            base_to_laser_tf = self.tf_buffer.lookup_transform(
-                self.base_frame,
+            map_to_laser_tf = self.tf_buffer.lookup_transform(
+                self.map_frame,
                 laser_frame,
                 rclpy.time.Time()
-            ) # from lidar_static_transform.py (offset of lidar to base link)
+            )
         except (LookupException, ConnectivityException, ExtrapolationException):
-            self.get_logger().warn('could not look up base link -> laser transform')
+            self.get_logger().warn(
+                f'could not look up {self.map_frame}->{laser_frame} transform'
+            )
             return None
 
-        laser_offset_x = base_to_laser_tf.transform.translation.x
-        laser_offset_y = base_to_laser_tf.transform.translation.y
-        q = base_to_laser_tf.transform.rotation
-        laser_yaw_offset = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
-
-        c = math.cos(self.robot_yaw)
-        s = math.sin(self.robot_yaw)
-
-        laser_x = self.robot_x + c * laser_offset_x - s * laser_offset_y
-        laser_y = self.robot_y + s * laser_offset_x + c * laser_offset_y
-        laser_yaw = self.robot_yaw + laser_yaw_offset
+        laser_x = map_to_laser_tf.transform.translation.x
+        laser_y = map_to_laser_tf.transform.translation.y
+        q = map_to_laser_tf.transform.rotation
+        laser_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
 
         return laser_x, laser_y, laser_yaw
 

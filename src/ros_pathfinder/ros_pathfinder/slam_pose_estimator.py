@@ -70,11 +70,13 @@ class LidarOdometry(Node):
         if self.last_odom_time is None:
             self.last_odom_time = now
             self.store_latest_odom_pose(msg)
+            self.publish_slam_odom(msg.header.stamp)
             return
         dt = now - self.last_odom_time
         self.last_odom_time = now
         if dt <= 0.0:
             self.store_latest_odom_pose(msg)
+            self.publish_slam_odom(msg.header.stamp)
             return
 
         v = msg.twist.twist.linear.x   # linear velocity  (m/s)
@@ -131,6 +133,7 @@ class LidarOdometry(Node):
         corr_tf.transform.rotation.z = math.sin(self.corr_theta / 2.0)
         corr_tf.transform.rotation.w = math.cos(self.corr_theta / 2.0)
         self.tf_broadcaster.sendTransform(corr_tf)
+        self.publish_slam_odom(msg.header.stamp)
 
     # EKF update/ correction step
     def scan_callback(self, msg: LaserScan):
@@ -217,6 +220,7 @@ class LidarOdometry(Node):
                 f"STATIONARY: rejecting ICP dx={dx:.5f}, "
                 f"dy={dy:.5f}, dtheta={dtheta:.5f}"
             )
+            self.publish_slam_odom(msg.header.stamp)
             return
 
         # Minimum accepted ICP motion once the robot is actually moving.
@@ -259,23 +263,25 @@ class LidarOdometry(Node):
         self.corr_y = y - (s * self.odom_x + c * self.odom_y)
         self.corr_theta = theta_corr
 
+        self.publish_slam_odom(msg.header.stamp)
+
+    def publish_slam_odom(self, stamp):
         odom = Odometry()
-        odom.header.stamp = msg.header.stamp
+        odom.header.stamp = stamp
         odom.header.frame_id = HEADER_FRAME
         odom.child_frame_id = CHILD_FRAME
 
-        odom.pose.pose.position.x = x
-        odom.pose.pose.position.y = y
+        odom.pose.pose.position.x = float(self.mu[0])
+        odom.pose.pose.position.y = float(self.mu[1])
         odom.pose.pose.position.z = 0.0
         odom.pose.pose.orientation.x = 0.0
         odom.pose.pose.orientation.y = 0.0
-        odom.pose.pose.orientation.z = math.sin(theta / 2.0)
-        odom.pose.pose.orientation.w = math.cos(theta / 2.0)
+        odom.pose.pose.orientation.z = math.sin(self.mu[2] / 2.0)
+        odom.pose.pose.orientation.w = math.cos(self.mu[2] / 2.0)
 
-        # TODO: add later (do we need this?)
-        odom.twist.twist.linear.x = 0.0
+        odom.twist.twist.linear.x = self.last_v
         odom.twist.twist.linear.y = 0.0
-        odom.twist.twist.angular.z = 0.0
+        odom.twist.twist.angular.z = self.last_w
 
         self.slam_odom_publisher.publish(odom)
 
