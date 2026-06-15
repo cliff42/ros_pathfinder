@@ -1,6 +1,13 @@
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
@@ -16,8 +23,20 @@ class OccupancyMapper(Node):
         super().__init__('occupancy_mapper')
         self.map_frame = self.declare_parameter('map_frame', 'slam_odom').value
 
-        self.map_publisher = self.create_publisher(OccupancyGrid, 'map', 10)
-        self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
+        map_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
+        self.map_publisher = self.create_publisher(OccupancyGrid, 'map', map_qos)
+        self.scan_subscriber = self.create_subscription(
+            LaserScan,
+            'scan',
+            self.scan_callback,
+            qos_profile_sensor_data,
+        )
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
