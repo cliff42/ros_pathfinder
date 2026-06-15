@@ -23,7 +23,7 @@ class MotorControlServer(Node):
         self.right_motor_publisher = self.create_publisher(Float64, 'right_motor', 10)
         self.data_lock = threading.Lock()
 
-        self.create_subscription(Odometry, 'odom', self._odom_cb, 10,
+        self.create_subscription(Odometry, 'raw_odom', self._odom_cb, 10,
                                  callback_group=self.cb_group)
 
         self._cmd_vel = Twist()

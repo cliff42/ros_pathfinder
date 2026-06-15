@@ -39,7 +39,7 @@ class ConversionTest(Node):
 
         landmark_marker = Marker()
         landmark_marker.header.stamp = self.get_clock().now().to_msg()
-        landmark_marker.header.frame_id = 'odom'
+        landmark_marker.header.frame_id = 'slam_odom'
         landmark_marker.type = Marker.SPHERE
         landmark_marker.scale.x = 0.1
         landmark_marker.scale.y = 0.1

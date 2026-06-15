@@ -20,7 +20,7 @@ class PathFollower(Node):
             'follow_path',
             self.execute_callback)
         
-        self.create_subscription(Odometry, 'odom', self._odom_cb, 10, callback_group=self.cb_group) # TODO: change to lidar_odom after testing
+        self.create_subscription(Odometry, 'slam_odom', self._odom_cb, 10, callback_group=self.cb_group)
         self.twist_publisher = self.create_publisher(Twist,'cmd_vel',10)
         self.odom_x: float
         self.odom_y: float

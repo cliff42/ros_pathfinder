@@ -62,12 +62,12 @@ class LandmarkIdentification(Node):
     def scan_callback(self, msg: LaserScan):
         try:
             odom_to_laser_tf = self.tf_buffer.lookup_transform(
-                'odom',                  
+                'slam_odom',
                 msg.header.frame_id, # laser
                 rclpy.time.Time()
             )
         except (LookupException, ConnectivityException, ExtrapolationException):
-            self.get_logger().warn('could not look up odom->laser transform')
+            self.get_logger().warn('could not look up slam_odom->laser transform')
             return
         
         self.grid = [-1] * (self.width * self.height) # reset map
@@ -160,7 +160,7 @@ class LandmarkIdentification(Node):
             points_in_line = self.points_from_line(line[0], line[1], line[2], line[3], line[4], line[5])
             line_marker = Marker()
             line_marker.header.stamp = self.get_clock().now().to_msg()
-            line_marker.header.frame_id = 'odom'
+            line_marker.header.frame_id = 'slam_odom'
             line_marker.type = Marker.LINE_STRIP
             line_marker.scale.x = 0.005
             line_marker.color.r = 0.0
@@ -183,7 +183,7 @@ class LandmarkIdentification(Node):
         for landmark in landmarks:
             landmark_marker = Marker()
             landmark_marker.header.stamp = self.get_clock().now().to_msg()
-            landmark_marker.header.frame_id = 'odom'
+            landmark_marker.header.frame_id = 'slam_odom'
             landmark_marker.type = Marker.SPHERE
             landmark_marker.scale.x = 0.1
             landmark_marker.scale.y = 0.1
@@ -365,7 +365,7 @@ class LandmarkIdentification(Node):
     def publish_map(self):
         msg = LandmarkIdentification()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'odom'
+        msg.header.frame_id = 'slam_odom'
 
         msg.info.resolution = self.resolution
         msg.info.width = self.width

@@ -57,7 +57,7 @@ class PathPlanner(Node):
         '''
 
         
-        self.create_subscription(Odometry,"lidar_odom",self.setStart,10)
+        self.create_subscription(Odometry,"slam_odom",self.setStart,10)
         self.create_subscription(OccupancyGrid,"map",self.planPath,10)
 
         self.create_subscription(PoseStamped,"goal_pose",self.setGoal,10)
@@ -84,7 +84,7 @@ class PathPlanner(Node):
         if self.planner == "ASTAR":
             path = Path()
             # TODO: populate header
-            path.header.frame_id = 'lidar_odom'
+            path.header.frame_id = 'slam_odom'
 
             DIAG = 0.05*math.sqrt(2)
             neighbor_offsets = {-1:0.05,-401:DIAG,-400:0.05,-399:DIAG,1:0.05,401:DIAG,400:0.05,399:DIAG}
@@ -230,7 +230,7 @@ class PathPlanner(Node):
             x = (c - 200) * 0.05
             pose = PoseStamped()
             # pose.header # TODO
-            pose.header._frame_id = 'lidar_odom'
+            pose.header.frame_id = 'slam_odom'
             pose.pose.position.x = x
             pose.pose.position.y = y
             pose.pose.position.z = 0.0
@@ -240,7 +240,7 @@ class PathPlanner(Node):
             pose.pose.orientation.w = 1.0
             path.poses.append(pose)
         goalPose = PoseStamped()
-        goalPose.header.frame_id = 'lidar_odom'
+        goalPose.header.frame_id = 'slam_odom'
         r,c = int(node/400), node % 400
         y = (r - 200) * 0.05
         x = (c - 200) * 0.05
@@ -339,7 +339,6 @@ Exploration
 3. Select next point to travel to (could be closest frontier cluster or largest frontier cluster)
 4. Repeat until no frontier clusters are left (room is fully explored)
 '''
-
 
 
 

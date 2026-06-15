@@ -12,7 +12,7 @@ import busio
 
 import math
 
-HEADER_FRAME = 'odom' # static world frame
+HEADER_FRAME = 'raw_odom' # uncorrected wheel odometry frame
 CHILD_FRAME = 'base_link' # robot frame
 
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
@@ -168,4 +168,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
