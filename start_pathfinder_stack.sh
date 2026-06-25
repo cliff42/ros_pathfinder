@@ -75,13 +75,11 @@ source_ros() {
     fi
 
     if [[ -n "${ROS_DISTRO:-}" && -f "/opt/ros/$ROS_DISTRO/setup.bash" ]]; then
-        # shellcheck disable=SC1090
-        source "/opt/ros/$ROS_DISTRO/setup.bash"
+        source_setup_file "/opt/ros/$ROS_DISTRO/setup.bash"
     else
         for distro in jazzy humble iron rolling foxy; do
             if [[ -f "/opt/ros/$distro/setup.bash" ]]; then
-                # shellcheck disable=SC1090
-                source "/opt/ros/$distro/setup.bash"
+                source_setup_file "/opt/ros/$distro/setup.bash"
                 break
             fi
         done
@@ -93,12 +91,19 @@ source_ros() {
     fi
 }
 
+source_setup_file() {
+    local setup_file="$1"
+    set +u
+    # shellcheck disable=SC1090
+    source "$setup_file"
+    set -u
+}
+
 source_envs() {
     source_ros
 
     if [[ -f "$ROOT_DIR/.venv/bin/activate" ]]; then
-        # shellcheck disable=SC1091
-        source "$ROOT_DIR/.venv/bin/activate"
+        source_setup_file "$ROOT_DIR/.venv/bin/activate"
     fi
 
     if [[ ! -f "$ROOT_DIR/install/setup.bash" ]]; then
@@ -107,8 +112,7 @@ source_envs() {
         exit 1
     fi
 
-    # shellcheck disable=SC1091
-    source "$ROOT_DIR/install/setup.bash"
+    source_setup_file "$ROOT_DIR/install/setup.bash"
 }
 
 pids=()
@@ -140,6 +144,9 @@ monitor_processes() {
             local pid="${pids[$i]}"
             local label="${labels[$i]}"
             if ! kill -0 "$pid" >/dev/null 2>&1; then
+                if [[ "$label" == "pick_goal" || "$label" == "go_forward_3m" ]]; then
+                    continue
+                fi
                 echo "process exited: $label"
                 echo "log: $LOG_DIR/$label.log"
                 cleanup
