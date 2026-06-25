@@ -68,6 +68,7 @@ class GoalPicker(Node):
         self.robot_x = None
         self.robot_y = None
         self.robot_yaw = None
+        self.pending_forward_goal = False
 
         self.get_logger().info(
             f'Goal picker ready: publish std_msgs/Empty on {self.trigger_topic} '
@@ -83,6 +84,10 @@ class GoalPicker(Node):
         self.robot_y = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         self.robot_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
+
+        if self.pending_forward_goal:
+            self.pending_forward_goal = False
+            self.publish_forward_goal()
 
     def pick_goal_callback(self, _msg: Empty):
         if self.latest_map is None:
@@ -108,9 +113,16 @@ class GoalPicker(Node):
 
     def forward_goal_callback(self, _msg: Empty):
         if self.robot_x is None:
-            self.get_logger().warn('cannot go forward: waiting for slam_odom')
+            self.pending_forward_goal = True
+            self.get_logger().warn(
+                'go-forward requested before slam_odom arrived; will publish '
+                'the forward goal after the first odom message'
+            )
             return
 
+        self.publish_forward_goal()
+
+    def publish_forward_goal(self):
         x = self.robot_x + self.forward_distance * math.cos(self.robot_yaw)
         y = self.robot_y + self.forward_distance * math.sin(self.robot_yaw)
         yaw = self.robot_yaw

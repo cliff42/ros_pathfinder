@@ -185,9 +185,13 @@ fi
 
 if [[ "$AUTO_PICK_GOAL" -eq 1 ]]; then
     (
-        sleep 5
-        ros2 topic pub --once /pick_goal std_msgs/msg/Empty "{}" \
-            >"$LOG_DIR/pick_goal.log" 2>&1 || true
+        {
+            sleep 5
+            echo "publishing /pick_goal"
+            ros2 topic pub --once --wait-matching-subscriptions 1 \
+                /pick_goal std_msgs/msg/Empty "{}" \
+                || ros2 topic pub --once /pick_goal std_msgs/msg/Empty "{}"
+        } >"$LOG_DIR/pick_goal.log" 2>&1 || true
     ) &
     pids+=("$!")
     labels+=("pick_goal")
@@ -195,9 +199,13 @@ fi
 
 if [[ "$AUTO_GO_FORWARD_3M" -eq 1 ]]; then
     (
-        sleep 5
-        ros2 topic pub --once /go_forward_3m std_msgs/msg/Empty "{}" \
-            >"$LOG_DIR/go_forward_3m.log" 2>&1 || true
+        {
+            sleep 5
+            echo "publishing /go_forward_3m"
+            ros2 topic pub --once --wait-matching-subscriptions 1 \
+                /go_forward_3m std_msgs/msg/Empty "{}" \
+                || ros2 topic pub --once /go_forward_3m std_msgs/msg/Empty "{}"
+        } >"$LOG_DIR/go_forward_3m.log" 2>&1 || true
     ) &
     pids+=("$!")
     labels+=("go_forward_3m")
