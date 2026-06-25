@@ -33,6 +33,7 @@ setup(
             "occupancy = ros_pathfinder.occupancy:main",
             "localization = ros_pathfinder.localization:main",
             "slam_pose_estimator = ros_pathfinder.slam_pose_estimator:main",
+            "goal_picker = ros_pathfinder.goal_picker:main",
             "planner = ros_pathfinder.planning_node:main",
             "test = ros_pathfinder.conversionTest:main",
             "path_follower = ros_pathfinder.path_follower:main",

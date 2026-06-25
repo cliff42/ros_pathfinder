@@ -60,7 +60,7 @@ class PathPlanner(Node):
         self.create_subscription(Odometry,"slam_odom",self.setStart,10)
         self.create_subscription(OccupancyGrid,"/map",self.planPath,10)
 
-        self.create_subscription(PoseStamped,"goal_pose",self.setGoal,10)
+        self.create_subscription(PoseStamped,"/goal_pose",self.setGoal,10)
         self._action_client = ActionClient(self,FollowPath,'follow_path')
         self.path_goal_in_flight = False
 
@@ -355,6 +355,5 @@ Exploration
 3. Select next point to travel to (could be closest frontier cluster or largest frontier cluster)
 4. Repeat until no frontier clusters are left (room is fully explored)
 '''
-
 
 
