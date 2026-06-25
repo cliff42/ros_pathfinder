@@ -23,8 +23,13 @@ class GoalPicker(Node):
         self.map_topic = self.declare_parameter('map_topic', '/map').value
         self.odom_topic = self.declare_parameter('odom_topic', 'slam_odom').value
         self.trigger_topic = self.declare_parameter('trigger_topic', '/pick_goal').value
+        self.forward_trigger_topic = self.declare_parameter(
+            'forward_trigger_topic',
+            '/go_forward_3m',
+        ).value
         self.goal_topic = self.declare_parameter('goal_topic', '/goal_pose').value
         self.min_goal_distance = self.declare_parameter('min_goal_distance', 0.5).value
+        self.forward_distance = self.declare_parameter('forward_distance', 3.0).value
 
         map_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -51,15 +56,23 @@ class GoalPicker(Node):
             self.pick_goal_callback,
             10,
         )
+        self.forward_trigger_subscriber = self.create_subscription(
+            Empty,
+            self.forward_trigger_topic,
+            self.forward_goal_callback,
+            10,
+        )
         self.goal_publisher = self.create_publisher(PoseStamped, self.goal_topic, 10)
 
         self.latest_map = None
         self.robot_x = None
         self.robot_y = None
+        self.robot_yaw = None
 
         self.get_logger().info(
             f'Goal picker ready: publish std_msgs/Empty on {self.trigger_topic} '
-            f'to publish a PoseStamped on {self.goal_topic}.'
+            f'to pick a map goal, or on {self.forward_trigger_topic} to go '
+            f'{self.forward_distance:.1f} m forward. Goals publish on {self.goal_topic}.'
         )
 
     def map_callback(self, msg: OccupancyGrid):
@@ -68,6 +81,8 @@ class GoalPicker(Node):
     def odom_callback(self, msg: Odometry):
         self.robot_x = msg.pose.pose.position.x
         self.robot_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        self.robot_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
 
     def pick_goal_callback(self, _msg: Empty):
         if self.latest_map is None:
@@ -83,20 +98,45 @@ class GoalPicker(Node):
         x, y = self.grid_index_to_world(self.latest_map, index)
         yaw = self.goal_yaw(x, y)
 
-        goal = PoseStamped()
-        goal.header.stamp = self.get_clock().now().to_msg()
-        goal.header.frame_id = self.latest_map.header.frame_id or 'slam_odom'
-        goal.pose.position.x = x
-        goal.pose.position.y = y
-        goal.pose.position.z = 0.0
-        goal.pose.orientation.z = math.sin(yaw / 2.0)
-        goal.pose.orientation.w = math.cos(yaw / 2.0)
+        goal = self.make_goal(x, y, yaw)
 
         self.goal_publisher.publish(goal)
         self.get_logger().info(
             f'published picked goal: x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}, '
             f'frame={goal.header.frame_id}'
         )
+
+    def forward_goal_callback(self, _msg: Empty):
+        if self.robot_x is None:
+            self.get_logger().warn('cannot go forward: waiting for slam_odom')
+            return
+
+        x = self.robot_x + self.forward_distance * math.cos(self.robot_yaw)
+        y = self.robot_y + self.forward_distance * math.sin(self.robot_yaw)
+        yaw = self.robot_yaw
+
+        goal = self.make_goal(x, y, yaw)
+        self.goal_publisher.publish(goal)
+        self.get_logger().info(
+            f'published forward goal: distance={self.forward_distance:.3f}, '
+            f'x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}, frame={goal.header.frame_id}'
+        )
+
+    def make_goal(self, x, y, yaw):
+        goal = PoseStamped()
+        goal.header.stamp = self.get_clock().now().to_msg()
+        goal.header.frame_id = self.goal_frame()
+        goal.pose.position.x = x
+        goal.pose.position.y = y
+        goal.pose.position.z = 0.0
+        goal.pose.orientation.z = math.sin(yaw / 2.0)
+        goal.pose.orientation.w = math.cos(yaw / 2.0)
+        return goal
+
+    def goal_frame(self):
+        if self.latest_map is not None and self.latest_map.header.frame_id:
+            return self.latest_map.header.frame_id
+        return 'slam_odom'
 
     def free_goal_indices(self, grid: OccupancyGrid):
         indices = []
