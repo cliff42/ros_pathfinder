@@ -29,12 +29,11 @@ class PathFollower(Node):
         self.odom_y = None
         self.odom_yaw = None
 
-        self.LINEAR_VEL = 0.08
+        self.LINEAR_VEL = 0.12
         self.GOAL_TOL = 0.08
-        self.LOOKAHEAD_DIST = 0.25
-        self.ANGULAR_GAIN = 1.0
-        self.MAX_ANGULAR_VEL = 0.35
-        self._last_log_time = self.get_clock().now()
+        self.LOOKAHEAD_DIST = 0.20
+        self.ANGULAR_GAIN = 1.5
+        self.MAX_ANGULAR_VEL = 0.7
 
     def _odom_cb(self, msg: Odometry):
         q = msg.pose.pose.orientation
@@ -120,15 +119,12 @@ class PathFollower(Node):
             feedback_msg.distance_to_goal = distance_to_goal
             goal_handle.publish_feedback(feedback_msg)
 
-            now = self.get_clock().now()
-            if (now - self._last_log_time).nanoseconds * 1e-9 >= 1.0:
-                self.get_logger().info(
-                    f'follow target={target_idx}/{len(path) - 1}, '
-                    f'target_dist={target_distance:.3f}, goal_dist={distance_to_goal:.3f}, '
-                    f'heading_error={heading_error:.3f}, v={linear_velocity:.3f}, '
-                    f'w={angular_velocity:.3f}'
-                )
-                self._last_log_time = now
+            self.get_logger().info(
+                f'follow target={target_idx}/{len(path) - 1}, '
+                f'target_dist={target_distance:.3f}, goal_dist={distance_to_goal:.3f}, '
+                f'heading_error={heading_error:.3f}, v={linear_velocity:.3f}, '
+                f'w={angular_velocity:.3f}'
+            )
 
             time.sleep(rate_sec)
 
