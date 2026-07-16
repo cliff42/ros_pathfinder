@@ -7,6 +7,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
+import math
 import threading
 
 
@@ -20,6 +21,7 @@ class MotorControlServer(Node):
     MAX_CMD_STEP  = 0.01        # duty-cycle change per control tick
     KP            = 0.4         # motor command per m/s of wheel-speed error
     LOG_PERIOD    = 1.0         # seconds
+    MOTOR_CMD_EPSILON = 0.002
 
     def __init__(self):
         super().__init__('controller_node')
@@ -34,8 +36,8 @@ class MotorControlServer(Node):
         self.create_subscription(Odometry, 'raw_odom', self._odom_cb, 10,
                                  callback_group=self.cb_group)
 
-        self._cmd_vel = Twist()
-        self._last_cmd_time = self.get_clock().now()
+        self._cmd_vel = None
+        self._last_cmd_time = None
         self.CMD_VEL_TIMEOUT = 0.5  # seconds
         self.create_subscription(Twist, 'cmd_vel', self._cmd_vel_cb, 10,
                                  callback_group=self.cb_group)
@@ -45,6 +47,9 @@ class MotorControlServer(Node):
         self._vel_r = 0.0
         self._last_cmd_l = 0.0
         self._last_cmd_r = 0.0
+        self._last_published_l = None
+        self._last_published_r = None
+        self._motors_stopped = True
         self._last_log_time = self.get_clock().now()
         self.get_logger().info(
             f'controller mode: use_odom_feedback={self.use_odom_feedback}'
@@ -67,16 +72,19 @@ class MotorControlServer(Node):
         # self.get_logger().info('left wheel speed: "%s" right wheel speed: "%s"' % (str(self._vel_l),str(self._vel_r)))
 
     def _control_loop(self):
+        if self._cmd_vel is None or self._last_cmd_time is None:
+            return
+
         elapsed = (self.get_clock().now() - self._last_cmd_time).nanoseconds * 1e-9
         if elapsed > self.CMD_VEL_TIMEOUT: # stop motors if no msg recieved for timeout seconds
-            self.publish_to_motors(0.0, 0.0, immediate=True)
+            self.publish_stop_once()
             return
 
         # 
         v = self._cmd_vel.linear.x
         w = self._cmd_vel.angular.z
         if abs(v) < 1e-3 and abs(w) < 1e-3:
-            self.publish_to_motors(0.0, 0.0, immediate=True)
+            self.publish_stop_once()
             return
 
         # desired linear speeds
@@ -124,8 +132,13 @@ class MotorControlServer(Node):
         return self.clamp(command, -self.MAX_MOTOR_CMD, self.MAX_MOTOR_CMD)
 
 
+    def publish_stop_once(self):
+        if self._motors_stopped:
+            return
+        self.publish_to_motors(0.0, 0.0, immediate=True, force=True)
+        self._motors_stopped = True
 
-    def publish_to_motors(self, left_speed, right_speed, immediate=False):
+    def publish_to_motors(self, left_speed, right_speed, immediate=False, force=False):
         left_speed = self.clamp(left_speed, -self.MAX_MOTOR_CMD, self.MAX_MOTOR_CMD)
         right_speed = self.clamp(right_speed, -self.MAX_MOTOR_CMD, self.MAX_MOTOR_CMD)
 
@@ -138,15 +151,36 @@ class MotorControlServer(Node):
             self._last_cmd_l = left_speed
             self._last_cmd_r = right_speed
 
+        if self.same_as_last_publish(left_speed, right_speed) and not force:
+            return left_speed, right_speed
+
         left_msg = Float64();  left_msg.data  = left_speed
         right_msg = Float64(); right_msg.data = right_speed
         self.left_motor_publisher.publish(left_msg)
         self.right_motor_publisher.publish(right_msg)
+        self._last_published_l = left_speed
+        self._last_published_r = right_speed
+        self._motors_stopped = abs(left_speed) < self.MOTOR_CMD_EPSILON and abs(right_speed) < self.MOTOR_CMD_EPSILON
         return left_speed, right_speed
 
     def slew_limit(self, target, current):
+        if abs(target) < self.MOTOR_CMD_EPSILON:
+            return 0.0
+        if abs(current) < self.MOTOR_CMD_EPSILON:
+            return math.copysign(min(abs(target), self.MIN_MOTOR_CMD), target)
+        if target * current < 0.0:
+            return 0.0
+
         delta = self.clamp(target - current, -self.MAX_CMD_STEP, self.MAX_CMD_STEP)
         return current + delta
+
+    def same_as_last_publish(self, left_speed, right_speed):
+        if self._last_published_l is None or self._last_published_r is None:
+            return False
+        return (
+            abs(left_speed - self._last_published_l) < self.MOTOR_CMD_EPSILON
+            and abs(right_speed - self._last_published_r) < self.MOTOR_CMD_EPSILON
+        )
 
     def clamp(self, value, low, high):
         return max(low, min(high, value))
