@@ -246,8 +246,8 @@ class OccupancyMapper(Node):
         msg.info.origin.position.z = 0.0
         msg.info.origin.orientation.w = 1.0
 
-        # msg.data = self.grid
-        msg.data = self.inflated_grid
+        msg.data = self.grid
+        # msg.data = self.inflated_grid
 
         self.map_publisher.publish(msg)
         self.get_logger().info(
