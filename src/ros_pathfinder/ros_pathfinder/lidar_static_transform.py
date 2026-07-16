@@ -10,7 +10,7 @@ from builtin_interfaces.msg import Time
 
 HEADER_FRAME = 'base_link' # TF from base_link frame (which is the moving robot frame)
 CHILD_FRAME = 'laser' # TF to laser frame (this id is the default from the sllidar_ros2 submodule)
-DEFAULT_LIDAR_YAW_RAD = 0.0
+DEFAULT_LIDAR_YAW_RAD = math.pi
 
 class LidarStaticTransform(Node):
     def __init__(self):
