@@ -15,12 +15,8 @@ import math
 HEADER_FRAME = 'raw_odom' # uncorrected wheel odometry frame
 CHILD_FRAME = 'base_link' # robot frame
 WHEEL_BASE_M = 0.55 # measured distance between wheels
-DEFAULT_INITIAL_HEADING_RAD = 0.0
+DEFAULT_INITIAL_HEADING_RAD = math.pi
 
-# Encoder sign convention:
-# positive wheel velocity means that wheel is driving the robot forward.
-# These are set so a positive motor command on both wheels produces +X motion
-# in base_link/raw_odom, matching ROS's x-forward convention.
 LEFT_ENCODER_SIGN = 1.0
 RIGHT_ENCODER_SIGN = -1.0
 
