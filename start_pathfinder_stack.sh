@@ -10,6 +10,8 @@ LIDAR_PACKAGE=""
 LIDAR_LAUNCH_FILE=""
 AUTO_PICK_GOAL=0
 AUTO_GO_FORWARD_3M=0
+ODOM_INITIAL_HEADING=""
+LIDAR_YAW=""
 
 usage() {
     cat <<'EOF'
@@ -24,6 +26,10 @@ Options:
   --no-motors                        Do not start controller or motor_controller.
   --pick-goal                        Publish one /pick_goal trigger after startup.
   --go-forward-3m                    Publish one /go_forward_3m trigger after startup.
+  --initial-heading <radians>        Start base_link at this yaw in odom.
+  --initial-heading-pi               Start base_link rotated 180 degrees.
+  --laser-yaw <radians>              Set base_link->laser yaw.
+  --laser-yaw-pi                     Rotate base_link->laser by 180 degrees.
   -h, --help                         Show this help.
 
 Examples:
@@ -55,6 +61,30 @@ while [[ $# -gt 0 ]]; do
             ;;
         --go-forward-3m)
             AUTO_GO_FORWARD_3M=1
+            shift
+            ;;
+        --initial-heading)
+            ODOM_INITIAL_HEADING="${2:-}"
+            if [[ -z "$ODOM_INITIAL_HEADING" ]]; then
+                echo "error: --initial-heading requires <radians>" >&2
+                exit 2
+            fi
+            shift 2
+            ;;
+        --initial-heading-pi)
+            ODOM_INITIAL_HEADING="3.141592653589793"
+            shift
+            ;;
+        --laser-yaw)
+            LIDAR_YAW="${2:-}"
+            if [[ -z "$LIDAR_YAW" ]]; then
+                echo "error: --laser-yaw requires <radians>" >&2
+                exit 2
+            fi
+            shift 2
+            ;;
+        --laser-yaw-pi)
+            LIDAR_YAW="3.141592653589793"
             shift
             ;;
         -h|--help)
@@ -168,8 +198,18 @@ if [[ "$START_LIDAR" -eq 1 ]]; then
     start_process lidar ros2 launch "$LIDAR_PACKAGE" "$LIDAR_LAUNCH_FILE"
 fi
 
-start_process odom_node ros2 run ros_pathfinder odom_node
-start_process lidar_static_tf ros2 run ros_pathfinder lidar_static_tf
+odom_cmd=(ros2 run ros_pathfinder odom_node)
+if [[ -n "$ODOM_INITIAL_HEADING" ]]; then
+    odom_cmd+=(--ros-args -p "initial_heading:=$ODOM_INITIAL_HEADING")
+fi
+
+lidar_static_cmd=(ros2 run ros_pathfinder lidar_static_tf)
+if [[ -n "$LIDAR_YAW" ]]; then
+    lidar_static_cmd+=(--ros-args -p "yaw:=$LIDAR_YAW")
+fi
+
+start_process odom_node "${odom_cmd[@]}"
+start_process lidar_static_tf "${lidar_static_cmd[@]}"
 start_process slam_pose_estimator ros2 run ros_pathfinder slam_pose_estimator
 start_process occupancy ros2 run ros_pathfinder occupancy
 start_process planner ros2 run ros_pathfinder planner

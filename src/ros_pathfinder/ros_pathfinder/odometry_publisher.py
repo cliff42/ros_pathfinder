@@ -15,6 +15,7 @@ import math
 HEADER_FRAME = 'raw_odom' # uncorrected wheel odometry frame
 CHILD_FRAME = 'base_link' # robot frame
 WHEEL_BASE_M = 0.55 # measured distance between wheels
+DEFAULT_INITIAL_HEADING_RAD = 0.0
 
 # Encoder sign convention:
 # positive wheel velocity means that wheel is driving the robot forward.
@@ -52,12 +53,20 @@ class OdometryPublisher(Node):
         self.tf_broadcaster = TransformBroadcaster(self)
         self.timer_period = 0.02
         self.timer = self.create_timer(self.timer_period, self.odom_callback)
+        self.initial_heading = float(
+            self.declare_parameter(
+                'initial_heading',
+                DEFAULT_INITIAL_HEADING_RAD
+            ).value
+        )
         self.x = 0.0
         self.y = 0.0
         self.z = 0.0
-        self.theta = 0.0
+        self.theta = self.initial_heading
         self.get_logger().info(
-            f'encoder signs: left={LEFT_ENCODER_SIGN}, right={RIGHT_ENCODER_SIGN}'
+            f'encoder signs: left={LEFT_ENCODER_SIGN}, '
+            f'right={RIGHT_ENCODER_SIGN}, '
+            f'initial_heading={self.initial_heading}'
         )
 
     def odom_callback(self):

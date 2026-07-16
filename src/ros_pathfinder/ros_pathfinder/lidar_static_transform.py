@@ -14,10 +14,10 @@ CHILD_FRAME = 'laser' # TF to laser frame (this id is the default from the sllid
 class LidarStaticTransform(Node):
     def __init__(self):
         super().__init__("lidar_static_transform")
-        self.x = 0.32
-        self.y = 0.0
-        self.z = 0.065 
-        self.yaw = 0.0
+        self.x = float(self.declare_parameter('x', 0.32).value)
+        self.y = float(self.declare_parameter('y', 0.0).value)
+        self.z = float(self.declare_parameter('z', 0.065).value)
+        self.yaw = float(self.declare_parameter('yaw', 0.0).value)
 
         quat = (0.0, 0.0, math.sin(self.yaw / 2.0), math.cos(self.yaw / 2.0))
 

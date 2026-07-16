@@ -70,6 +70,10 @@ class LidarOdometry(Node):
         if self.last_odom_time is None:
             self.last_odom_time = now
             self.store_latest_odom_pose(msg)
+            self.mu = self.latest_odom_pose.copy()
+            self.icp_x = float(self.mu[0])
+            self.icp_y = float(self.mu[1])
+            self.icp_theta = float(self.mu[2])
             self.publish_slam_odom(msg.header.stamp)
             return
         dt = now - self.last_odom_time
