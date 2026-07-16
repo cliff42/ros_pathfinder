@@ -28,6 +28,7 @@ setup(
             "listener = ros_pathfinder.test_subscriber:main",
             "motor_controller = ros_pathfinder.motor_controller:main",
             "teleop_node = ros_pathfinder.teleop:main",
+            "cmd_vel_teleop = ros_pathfinder.teleop:main_cmd_vel",
             "odom_node = ros_pathfinder.odometry_publisher:main",
             "lidar_static_tf = ros_pathfinder.lidar_static_transform:main",
             "occupancy = ros_pathfinder.occupancy:main",

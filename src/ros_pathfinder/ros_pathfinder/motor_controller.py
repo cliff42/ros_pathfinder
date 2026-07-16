@@ -8,9 +8,15 @@ from std_msgs.msg import Float64
 left_motor = PhaseEnableMotor(20, 21)
 right_motor = PhaseEnableMotor(23, 24)
 
+COMMAND_EPSILON = 0.005
+
+
 class MotorController(Node):
     def __init__(self):
         super().__init__('motor_controller')
+        self.last_left_speed = None
+        self.last_right_speed = None
+
         self.left_motor_subscriber = self.create_subscription(
             Float64,
             'left_motor',
@@ -23,20 +29,38 @@ class MotorController(Node):
             10)
 
     def listener_callback_left(self, msg):
-        speed = msg.data
-        if speed < 0:
-            left_motor.backward(abs(speed))
-        else:
-            left_motor.forward(abs(speed))
-        self.get_logger().info('left msg: "%s"' % msg.data)
+        self.last_left_speed = self.apply_motor_command(
+            left_motor,
+            'left',
+            msg.data,
+            self.last_left_speed,
+        )
 
     def listener_callback_right(self, msg):
-        speed = msg.data
-        if speed < 0:
-            right_motor.backward(abs(speed))
+        self.last_right_speed = self.apply_motor_command(
+            right_motor,
+            'right',
+            msg.data,
+            self.last_right_speed,
+        )
+
+    def apply_motor_command(self, motor, label, speed, last_speed):
+        speed = max(-1.0, min(1.0, float(speed)))
+        if abs(speed) < COMMAND_EPSILON:
+            speed = 0.0
+
+        if last_speed is not None and abs(speed - last_speed) < COMMAND_EPSILON:
+            return last_speed
+
+        if speed > 0.0:
+            motor.forward(speed)
+        elif speed < 0.0:
+            motor.backward(abs(speed))
         else:
-            right_motor.forward(abs(speed))
-        self.get_logger().info('right msg: "%s"' % msg.data)
+            motor.stop()
+
+        self.get_logger().info(f'{label} motor command: {speed:.3f}')
+        return speed
 
 
 

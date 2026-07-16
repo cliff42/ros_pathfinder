@@ -2,6 +2,7 @@ import math
 import random
 
 import rclpy
+from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import (
@@ -11,8 +12,9 @@ from rclpy.qos import (
     ReliabilityPolicy,
 )
 
+from action_interfaces.action import FollowPath
 from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import OccupancyGrid, Odometry
+from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from std_msgs.msg import Empty
 
 
@@ -28,8 +30,13 @@ class GoalPicker(Node):
             '/go_forward_3m',
         ).value
         self.goal_topic = self.declare_parameter('goal_topic', '/goal_pose').value
+        self.forward_action = self.declare_parameter(
+            'forward_action',
+            'follow_path',
+        ).value
         self.min_goal_distance = self.declare_parameter('min_goal_distance', 0.5).value
         self.forward_distance = self.declare_parameter('forward_distance', 3.0).value
+        self.forward_path_step = self.declare_parameter('forward_path_step', 0.2).value
 
         map_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -63,17 +70,21 @@ class GoalPicker(Node):
             10,
         )
         self.goal_publisher = self.create_publisher(PoseStamped, self.goal_topic, 10)
+        self.forward_path_client = ActionClient(self, FollowPath, self.forward_action)
 
         self.latest_map = None
         self.robot_x = None
         self.robot_y = None
         self.robot_yaw = None
+        self.odom_frame = 'slam_odom'
         self.pending_forward_goal = False
+        self.forward_goal_in_flight = False
 
         self.get_logger().info(
             f'Goal picker ready: publish std_msgs/Empty on {self.trigger_topic} '
-            f'to pick a map goal, or on {self.forward_trigger_topic} to go '
-            f'{self.forward_distance:.1f} m forward. Goals publish on {self.goal_topic}.'
+            f'to pick a map goal. Publish std_msgs/Empty on '
+            f'{self.forward_trigger_topic} to follow a straight '
+            f'{self.forward_distance:.1f} m forward path.'
         )
 
     def map_callback(self, msg: OccupancyGrid):
@@ -82,12 +93,14 @@ class GoalPicker(Node):
     def odom_callback(self, msg: Odometry):
         self.robot_x = msg.pose.pose.position.x
         self.robot_y = msg.pose.pose.position.y
+        if msg.header.frame_id:
+            self.odom_frame = msg.header.frame_id
         q = msg.pose.pose.orientation
         self.robot_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
 
         if self.pending_forward_goal:
             self.pending_forward_goal = False
-            self.publish_forward_goal()
+            self.send_forward_path()
 
     def pick_goal_callback(self, _msg: Empty):
         if self.latest_map is None:
@@ -116,28 +129,95 @@ class GoalPicker(Node):
             self.pending_forward_goal = True
             self.get_logger().warn(
                 'go-forward requested before slam_odom arrived; will publish '
-                'the forward goal after the first odom message'
+                'the forward path after the first odom message'
             )
             return
 
-        self.publish_forward_goal()
+        self.send_forward_path()
 
-    def publish_forward_goal(self):
-        x = self.robot_x + self.forward_distance * math.cos(self.robot_yaw)
-        y = self.robot_y + self.forward_distance * math.sin(self.robot_yaw)
-        yaw = self.robot_yaw
+    def send_forward_path(self):
+        if self.forward_goal_in_flight:
+            self.get_logger().warn('forward path already in flight')
+            return
 
-        goal = self.make_goal(x, y, yaw)
-        self.goal_publisher.publish(goal)
+        if not self.forward_path_client.wait_for_server(timeout_sec=0.5):
+            self.get_logger().warn(
+                f'cannot send forward path: {self.forward_action} action '
+                'server is not available'
+            )
+            return
+
+        path = self.make_forward_path()
+        goal = FollowPath.Goal()
+        goal.path = path
+
+        self.forward_goal_in_flight = True
+        future = self.forward_path_client.send_goal_async(goal)
+        future.add_done_callback(self.forward_path_goal_response)
+
+        final_pose = path.poses[-1].pose.position
         self.get_logger().info(
-            f'published forward goal: distance={self.forward_distance:.3f}, '
-            f'x={x:.3f}, y={y:.3f}, yaw={yaw:.3f}, frame={goal.header.frame_id}'
+            f'sent straight forward path: distance={self.forward_distance:.3f}, '
+            f'waypoints={len(path.poses)}, x={final_pose.x:.3f}, '
+            f'y={final_pose.y:.3f}, yaw={self.robot_yaw:.3f}, '
+            f'frame={path.header.frame_id}'
         )
 
+    def make_forward_path(self):
+        path = Path()
+        path.header.stamp = self.get_clock().now().to_msg()
+        path.header.frame_id = self.odom_frame
+
+        steps = max(1, int(math.ceil(self.forward_distance / self.forward_path_step)))
+        for step in range(1, steps + 1):
+            distance = min(step * self.forward_path_step, self.forward_distance)
+            pose = self.make_pose_stamped(
+                self.robot_x + distance * math.cos(self.robot_yaw),
+                self.robot_y + distance * math.sin(self.robot_yaw),
+                self.robot_yaw,
+                self.odom_frame,
+            )
+            path.poses.append(pose)
+
+        return path
+
+    def forward_path_goal_response(self, future):
+        try:
+            goal_handle = future.result()
+        except Exception as exc:
+            self.get_logger().warn(f'forward path request failed: {exc}')
+            self.forward_goal_in_flight = False
+            return
+
+        if not goal_handle.accepted:
+            self.get_logger().warn('forward path rejected')
+            self.forward_goal_in_flight = False
+            return
+
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self.forward_path_result)
+
+    def forward_path_result(self, future):
+        try:
+            result = future.result().result
+        except Exception as exc:
+            self.get_logger().warn(f'forward path result failed: {exc}')
+            self.forward_goal_in_flight = False
+            return
+
+        self.get_logger().info(
+            f'forward path result: success={result.success}, '
+            f'message="{result.message}"'
+        )
+        self.forward_goal_in_flight = False
+
     def make_goal(self, x, y, yaw):
+        return self.make_pose_stamped(x, y, yaw, self.goal_frame())
+
+    def make_pose_stamped(self, x, y, yaw, frame_id):
         goal = PoseStamped()
         goal.header.stamp = self.get_clock().now().to_msg()
-        goal.header.frame_id = self.goal_frame()
+        goal.header.frame_id = frame_id
         goal.pose.position.x = x
         goal.pose.position.y = y
         goal.pose.position.z = 0.0
