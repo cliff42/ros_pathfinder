@@ -36,7 +36,15 @@ class TeleopNode(Node):
         self.mode = mode
 
         self.stop_event = threading.Event()
-        self.term_settings = termios.tcgetattr(sys.stdin)
+        self.stdin_fd = sys.stdin.fileno()
+        self.term_settings = None
+        if sys.stdin.isatty():
+            self.term_settings = termios.tcgetattr(self.stdin_fd)
+        else:
+            raise RuntimeError(
+                "keyboard teleop needs an interactive terminal; run it in a "
+                "separate shell, not from start_pathfinder_stack.sh"
+            )
 
         self.left_pub = None
         self.right_pub = None
@@ -67,18 +75,16 @@ class TeleopNode(Node):
     def destroy_node(self):
         self.stop_event.set()
         self.publish_stop()
-        try:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.term_settings)
-        except Exception:
-            pass
+        self.restore_terminal()
         return super().destroy_node()
 
     def get_key(self, timeout_sec: float = 0.1) -> str:
-        tty.setcbreak(sys.stdin.fileno())
-        rlist, _, _ = select([sys.stdin], [], [], timeout_sec)
-        key = sys.stdin.read(1) if rlist else ""
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.term_settings)
-        return key
+        try:
+            tty.setcbreak(self.stdin_fd)
+            rlist, _, _ = select([sys.stdin], [], [], timeout_sec)
+            return sys.stdin.read(1) if rlist else ""
+        finally:
+            self.restore_terminal()
 
     def set_command(self, key: str) -> None:
         if self.mode == self.DIRECT_MOTOR:
@@ -134,38 +140,59 @@ class TeleopNode(Node):
             pass
 
     def keyboard_loop(self):
-        self.publish_stop()
+        try:
+            self.publish_stop()
 
-        while rclpy.ok() and not self.stop_event.is_set():
-            key = self.get_key(PUBLISH_PERIOD_SEC)
-            if key in MOVE_BINDINGS:
-                self.set_command(key)
-                self.publish_current()
-            elif self.mode == self.CMD_VEL:
-                self.publish_current()
+            while rclpy.ok() and not self.stop_event.is_set():
+                key = self.get_key(PUBLISH_PERIOD_SEC)
+                if key in MOVE_BINDINGS:
+                    self.set_command(key)
+                    self.publish_current()
+                elif self.mode == self.CMD_VEL:
+                    self.publish_current()
+        except Exception as exc:
+            self.get_logger().error(f"keyboard teleop stopped: {exc}")
+            self.stop_event.set()
+            self.publish_stop()
+
+    def restore_terminal(self):
+        if self.term_settings is None:
+            return
+        try:
+            termios.tcsetattr(self.stdin_fd, termios.TCSADRAIN, self.term_settings)
+        except Exception:
+            pass
 
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TeleopNode(TeleopNode.DIRECT_MOTOR)
+    node = None
     try:
+        node = TeleopNode(TeleopNode.DIRECT_MOTOR)
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except RuntimeError as exc:
+        print(f"teleop_node error: {exc}", file=sys.stderr)
     finally:
-        node.destroy_node()
+        if node is not None:
+            node.destroy_node()
         rclpy.shutdown()
 
 
 def main_cmd_vel(args=None):
     rclpy.init(args=args)
-    node = TeleopNode(TeleopNode.CMD_VEL)
+    node = None
     try:
+        node = TeleopNode(TeleopNode.CMD_VEL)
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except RuntimeError as exc:
+        print(f"cmd_vel_teleop error: {exc}", file=sys.stderr)
     finally:
-        node.destroy_node()
+        if node is not None:
+            node.destroy_node()
         rclpy.shutdown()
 
 
