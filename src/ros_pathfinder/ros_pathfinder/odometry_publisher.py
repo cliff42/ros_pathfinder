@@ -14,6 +14,14 @@ import math
 
 HEADER_FRAME = 'raw_odom' # uncorrected wheel odometry frame
 CHILD_FRAME = 'base_link' # robot frame
+WHEEL_BASE_M = 0.55 # measured distance between wheels
+
+# Encoder sign convention:
+# positive wheel velocity means that wheel is driving the robot forward.
+# These are set so a positive motor command on both wheels produces +X motion
+# in base_link/raw_odom, matching ROS's x-forward convention.
+LEFT_ENCODER_SIGN = 1.0
+RIGHT_ENCODER_SIGN = -1.0
 
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
 
@@ -48,6 +56,9 @@ class OdometryPublisher(Node):
         self.y = 0.0
         self.z = 0.0
         self.theta = 0.0
+        self.get_logger().info(
+            f'encoder signs: left={LEFT_ENCODER_SIGN}, right={RIGHT_ENCODER_SIGN}'
+        )
 
     def odom_callback(self):
         tf = TransformStamped()
@@ -70,8 +81,8 @@ class OdometryPublisher(Node):
         self.vel_l, self.prev_distance_l = self.get_velocity(self.distance_l, self.prev_distance_l, self.timer_period)
         self.vel_r, self.prev_distance_r = self.get_velocity(self.distance_r, self.prev_distance_r, self.timer_period)
 
-        # wheel is backwards
-        self.vel_l = -1*self.vel_l
+        self.vel_l *= LEFT_ENCODER_SIGN
+        self.vel_r *= RIGHT_ENCODER_SIGN
 
         # TODO: should we reuse the linear velocity here
         x_dot = ((self.vel_r + self.vel_l) / 2) * math.cos(self.theta)
@@ -82,7 +93,7 @@ class OdometryPublisher(Node):
         self.y = self.y + y_dot * self.timer_period
 
         # TODO: should we reuse the angular velocity here
-        theta_dot = (self.vel_r - self.vel_l) / 0.55 # measured from distance between wheels (m)
+        theta_dot = (self.vel_r - self.vel_l) / WHEEL_BASE_M
         self.theta = self.theta + theta_dot * self.timer_period
 
         tf.transform.translation.x = float(self.x)
@@ -116,7 +127,7 @@ class OdometryPublisher(Node):
         # angular velocity
         msg.twist.twist.angular.x = 0.0
         msg.twist.twist.angular.y = 0.0
-        msg.twist.twist.angular.z = (self.vel_r - self.vel_l) / 0.55 # from https://en.wikipedia.org/wiki/Differential_wheeled_robot
+        msg.twist.twist.angular.z = (self.vel_r - self.vel_l) / WHEEL_BASE_M # from https://en.wikipedia.org/wiki/Differential_wheeled_robot
 
         # TODO: determine real values for this (account for IMU error for angular and encoder error for linear)
         # (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
