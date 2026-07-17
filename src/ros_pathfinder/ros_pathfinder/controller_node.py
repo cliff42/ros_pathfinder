@@ -127,18 +127,18 @@ class MotorControlServer(Node):
         if abs(desired_velocity) < self.MIN_WHEEL_VEL:
             return 0.0
 
-        feedforward = (desired_velocity / self.MAX_WHEEL_VEL) * self.MAX_MOTOR_CMD
+        speed_fraction = min(abs(desired_velocity) / self.MAX_WHEEL_VEL, 1.0)
+        feedforward_mag = self.MIN_MOTOR_CMD + speed_fraction * (
+            self.MAX_MOTOR_CMD - self.MIN_MOTOR_CMD
+        )
+        feedforward = math.copysign(feedforward_mag, desired_velocity)
         correction = self.KP * velocity_error
         command = feedforward + correction
 
         if desired_velocity > 0.0:
             command = max(0.0, command)
-            if command > 0.0:
-                command = max(self.MIN_MOTOR_CMD, command)
         else:
             command = min(0.0, command)
-            if command < 0.0:
-                command = min(-self.MIN_MOTOR_CMD, command)
 
         return self.clamp(command, -self.MAX_MOTOR_CMD, self.MAX_MOTOR_CMD)
 

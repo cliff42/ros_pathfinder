@@ -3,7 +3,14 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 from nav_msgs.msg import Odometry
-from tf2_ros import TransformBroadcaster
+from tf2_ros import (
+    Buffer,
+    ConnectivityException,
+    ExtrapolationException,
+    LookupException,
+    TransformBroadcaster,
+    TransformListener,
+)
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import LaserScan
 
@@ -24,12 +31,47 @@ class LidarOdometry(Node):
         self.use_icp_correction = bool(
             self.declare_parameter('use_icp_correction', False).value
         )
+        self.debug_icp = bool(
+            self.declare_parameter('debug_icp', False).value
+        )
+        self.process_icp = self.use_icp_correction or self.debug_icp
+
+        self.min_icp_translation = float(
+            self.declare_parameter('min_icp_translation', 0.005).value
+        )
+        self.min_icp_rotation = float(
+            self.declare_parameter('min_icp_rotation', 0.003).value
+        )
+        self.min_icp_matches = int(
+            self.declare_parameter('min_icp_matches', 20).value
+        )
+        self.max_icp_rmse = float(
+            self.declare_parameter('max_icp_rmse', 0.08).value
+        )
+        self.max_icp_translation_error = float(
+            self.declare_parameter('max_icp_translation_error', 0.10).value
+        )
+        self.max_icp_rotation_error = float(
+            self.declare_parameter('max_icp_rotation_error', 0.25).value
+        )
+        self.max_icp_translation_correction = float(
+            self.declare_parameter('max_icp_translation_correction', 0.03).value
+        )
+        self.max_icp_rotation_correction = float(
+            self.declare_parameter('max_icp_rotation_correction', 0.08).value
+        )
+        self.icp_correction_gain = float(
+            self.declare_parameter('icp_correction_gain', 0.35).value
+        )
+
         self.slam_odom_publisher = self.create_publisher(Odometry, 'slam_odom', 10)
         self.scan_subscriber = None
-        if self.use_icp_correction:
+        if self.process_icp:
             self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
         self.odom_subscriber = self.create_subscription(Odometry, 'raw_odom', self.odom_callback, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.prev_points_tree = None
         self.prev_points = None
 
@@ -55,6 +97,7 @@ class LidarOdometry(Node):
         self.last_odom_time = None
         self.latest_odom_pose = None
         self.prev_scan_odom_pose = None
+        self.prev_scan_mu_pose = None
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -68,9 +111,12 @@ class LidarOdometry(Node):
         # Used by scan_callback to reject stationary ICP noise.
         self.last_v = 0.0
         self.last_w = 0.0
+        self.logged_laser_transform = False
+        self.warned_missing_laser_transform = False
 
         self.get_logger().info(
-            f'slam pose estimator mode: use_icp_correction={self.use_icp_correction}'
+            f'slam pose estimator mode: use_icp_correction={self.use_icp_correction}, '
+            f'debug_icp={self.debug_icp}'
         )
 
     # EKF predict step
@@ -164,7 +210,9 @@ class LidarOdometry(Node):
 
     # EKF update/ correction step
     def scan_callback(self, msg: LaserScan):
-        points = self.scan_to_points(msg)
+        points = self.scan_to_base_points(msg)
+        if points is None:
+            return
         if points.shape[0] < 3:
             return
 
@@ -173,65 +221,43 @@ class LidarOdometry(Node):
             self.prev_points_tree = KDTree(points, leaf_size=10)
             if self.latest_odom_pose is not None:
                 self.prev_scan_odom_pose = self.latest_odom_pose.copy()
+            if self.mu is not None:
+                self.prev_scan_mu_pose = self.mu.copy()
             return
 
-        MAX_ITER = 10
-        CONVERGENCE_T = 1e-4
-        CONVERGENCE_R = 1e-5
-
         odom_delta = self.get_scan_to_scan_odom_delta()
-        R_total, t_total = self.pose_to_matrix(odom_delta)
-        source_pts = self.transform_points(points, R_total, t_total)
+        previous_mu_pose = None
+        if self.prev_scan_mu_pose is not None:
+            previous_mu_pose = self.prev_scan_mu_pose.copy()
 
-        # iteration loop for ICP
-        for _ in range(MAX_ITER):
-            matched_source_pts, matched_target_pts = self.get_matches(source_pts)
-            if matched_source_pts is None:
-                break
-
-            # 1. calculate centroids
-            source_centroid = self.get_centroid(matched_source_pts)
-            target_centroid = self.get_centroid(matched_target_pts)
-
-            # 2. center target and source scans
-            source_centered = matched_source_pts - source_centroid
-            target_centered = matched_target_pts - target_centroid
-
-            # 3. create covariance matrix
-            M = np.dot(source_centered.T, target_centered)
-
-            # 4. SVD to get rotation & translation
-            U, W, V_t = np.linalg.svd(M)
-
-            # guard against reflection
-            if np.linalg.det(V_t.T @ U.T) < 0:
-                V_t[-1, :] *= -1
-            R = V_t.T @ U.T
-            t = target_centroid - R @ source_centroid
-
-            # accumulate transform
-            t_total = R @ t_total + t
-            R_total = R @ R_total
-
-            # apply to source for next iteration
-            source_pts = self.transform_points(points, R_total, t_total)
-
-            # convergence check
-            if np.linalg.norm(t) < CONVERGENCE_T and abs(math.atan2(R[1, 0], R[0, 0])) < CONVERGENCE_R:
-                break
+        icp_result = self.run_icp(points, odom_delta)
 
         self.prev_points = points
         self.prev_points_tree = KDTree(points, leaf_size=10)
         if self.latest_odom_pose is not None:
             self.prev_scan_odom_pose = self.latest_odom_pose.copy()
+        self.prev_scan_mu_pose = self.mu.copy()
 
-        dtheta = math.atan2(R_total[1, 0], R_total[0, 0])
-        dx = float(t_total[0])
-        dy = float(t_total[1])
+        if icp_result is None:
+            self.get_logger().info(
+                f"ICP_REJECT reason=no_matches odom_delta="
+                f"({odom_delta[0]:.5f}, {odom_delta[1]:.5f}, {odom_delta[2]:.5f})"
+            )
+            self.publish_slam_odom(msg.header.stamp)
+            return
+
+        dx, dy, dtheta, match_count, rmse, iterations = icp_result
+        translation_error = math.hypot(dx - odom_delta[0], dy - odom_delta[1])
+        rotation_error = self.wrap_angle(dtheta - odom_delta[2])
 
         self.get_logger().info(
             f"v={self.last_v:.5f}, w={self.last_w:.5f}, "
+            f"odom_dx={odom_delta[0]:.5f}, odom_dy={odom_delta[1]:.5f}, "
+            f"odom_dtheta={odom_delta[2]:.5f}, "
             f"icp_dx={dx:.5f}, icp_dy={dy:.5f}, icp_dtheta={dtheta:.5f}, "
+            f"icp_matches={match_count}, icp_rmse={rmse:.5f}, "
+            f"icp_iters={iterations}, trans_err={translation_error:.5f}, "
+            f"rot_err={rotation_error:.5f}, "
             f"odom=({self.odom_x:.3f}, {self.odom_y:.3f}, {self.odom_theta:.3f}), "
             f"mu=({self.mu[0]:.3f}, {self.mu[1]:.3f}, {self.mu[2]:.3f})"
         )
@@ -250,34 +276,82 @@ class LidarOdometry(Node):
             self.publish_slam_odom(msg.header.stamp)
             return
 
-        # Minimum accepted ICP motion once the robot is actually moving.
-        MIN_T = 0.01   # 1 cm
-        MIN_R = 0.005  # ~0.29 degrees
-        if math.hypot(dx, dy) > MIN_T or abs(dtheta) > MIN_R:
-            # advance the independent ICP pose accumulator to form measurement z
-            c_icp = math.cos(self.icp_theta)
-            s_icp = math.sin(self.icp_theta)
-            self.icp_x += c_icp * dx - s_icp * dy
-            self.icp_y += s_icp * dx + c_icp * dy
-            self.icp_theta = math.atan2(
-                math.sin(self.icp_theta + dtheta),
-                math.cos(self.icp_theta + dtheta)
+        if self.debug_icp and not self.use_icp_correction:
+            self.get_logger().info('ICP_DEBUG_ONLY: computed ICP but did not apply it')
+            self.publish_slam_odom(msg.header.stamp)
+            return
+
+        if match_count < self.min_icp_matches:
+            self.reject_icp(
+                msg.header.stamp,
+                'too_few_matches',
+                dx,
+                dy,
+                dtheta,
+                match_count,
+                rmse,
             )
+            return
 
-            # EKF update step
-            # ICP measurement: z
-            z = np.array([self.icp_x, self.icp_y, self.icp_theta])
+        if rmse > self.max_icp_rmse:
+            self.reject_icp(msg.header.stamp, 'rmse', dx, dy, dtheta, match_count, rmse)
+            return
 
-            # innovation (wrap angle component)
-            innovation = z - self.mu # innovation is diff between ICP measurement and current mu location
-            innovation[2] = math.atan2(math.sin(innovation[2]), math.cos(innovation[2]))
+        if translation_error > self.max_icp_translation_error:
+            self.reject_icp(
+                msg.header.stamp,
+                'translation_disagreement',
+                dx,
+                dy,
+                dtheta,
+                match_count,
+                rmse,
+            )
+            return
 
-            S = self.P + self.R_meas # TODO: when implementing SLAM actually incorporate the observation matrix
-            K = self.P @ np.linalg.inv(S) # kalman gain
+        if abs(rotation_error) > self.max_icp_rotation_error:
+            self.reject_icp(
+                msg.header.stamp,
+                'rotation_disagreement',
+                dx,
+                dy,
+                dtheta,
+                match_count,
+                rmse,
+            )
+            return
 
-            self.mu = self.mu + K @ innovation
-            self.mu[2] = math.atan2(math.sin(self.mu[2]), math.cos(self.mu[2]))
-            self.P = (np.eye(3) - K) @ self.P # shrink uncertainty based on kalman gain
+        if (math.hypot(dx, dy) < self.min_icp_translation
+                and abs(dtheta) < self.min_icp_rotation):
+            self.reject_icp(msg.header.stamp, 'below_motion_threshold', dx, dy, dtheta, match_count, rmse)
+            return
+
+        if previous_mu_pose is None:
+            self.reject_icp(msg.header.stamp, 'missing_previous_mu', dx, dy, dtheta, match_count, rmse)
+            return
+
+        measurement_pose = self.compose_pose(previous_mu_pose, np.array([dx, dy, dtheta]))
+        innovation = measurement_pose - self.mu
+        innovation[2] = self.wrap_angle(innovation[2])
+
+        translation_innovation = math.hypot(innovation[0], innovation[1])
+        if translation_innovation > self.max_icp_translation_correction:
+            scale = self.max_icp_translation_correction / translation_innovation
+            innovation[0] *= scale
+            innovation[1] *= scale
+        innovation[2] = self.clamp(
+            innovation[2],
+            -self.max_icp_rotation_correction,
+            self.max_icp_rotation_correction,
+        )
+
+        self.mu = self.mu + self.icp_correction_gain * innovation
+        self.mu[2] = self.wrap_angle(self.mu[2])
+        self.get_logger().info(
+            f"ICP_APPLY innovation=({innovation[0]:.5f}, {innovation[1]:.5f}, "
+            f"{innovation[2]:.5f}), gain={self.icp_correction_gain:.3f}, "
+            f"mu=({self.mu[0]:.3f}, {self.mu[1]:.3f}, {self.mu[2]:.3f})"
+        )
 
         x, y, theta = self.mu[0], self.mu[1], self.mu[2]
 
@@ -290,7 +364,65 @@ class LidarOdometry(Node):
         self.corr_y = y - (s * self.odom_x + c * self.odom_y)
         self.corr_theta = theta_corr
 
+        self.prev_scan_mu_pose = self.mu.copy()
         self.publish_slam_odom(msg.header.stamp)
+
+    def run_icp(self, points, odom_delta):
+        MAX_ITER = 10
+        CONVERGENCE_T = 1e-4
+        CONVERGENCE_R = 1e-5
+
+        R_total, t_total = self.pose_to_matrix(odom_delta)
+        source_pts = self.transform_points(points, R_total, t_total)
+        match_count = 0
+        rmse = float('inf')
+        iterations = 0
+
+        for iteration in range(1, MAX_ITER + 1):
+            matched_source_pts, matched_target_pts, dists = self.get_matches(source_pts)
+            if matched_source_pts is None:
+                break
+
+            match_count = int(dists.size)
+            rmse = float(math.sqrt(np.mean(dists * dists)))
+
+            source_centroid = self.get_centroid(matched_source_pts)
+            target_centroid = self.get_centroid(matched_target_pts)
+
+            source_centered = matched_source_pts - source_centroid
+            target_centered = matched_target_pts - target_centroid
+
+            M = np.dot(source_centered.T, target_centered)
+            U, W, V_t = np.linalg.svd(M)
+
+            if np.linalg.det(V_t.T @ U.T) < 0:
+                V_t[-1, :] *= -1
+            R = V_t.T @ U.T
+            t = target_centroid - R @ source_centroid
+
+            t_total = R @ t_total + t
+            R_total = R @ R_total
+            source_pts = self.transform_points(points, R_total, t_total)
+            iterations = iteration
+
+            dtheta_step = math.atan2(R[1, 0], R[0, 0])
+            if np.linalg.norm(t) < CONVERGENCE_T and abs(dtheta_step) < CONVERGENCE_R:
+                break
+
+        if match_count == 0:
+            return None
+
+        dtheta = math.atan2(R_total[1, 0], R_total[0, 0])
+        dx = float(t_total[0])
+        dy = float(t_total[1])
+        return dx, dy, dtheta, match_count, rmse, iterations
+
+    def reject_icp(self, stamp, reason, dx, dy, dtheta, match_count, rmse):
+        self.get_logger().info(
+            f"ICP_REJECT reason={reason} dx={dx:.5f}, dy={dy:.5f}, "
+            f"dtheta={dtheta:.5f}, matches={match_count}, rmse={rmse:.5f}"
+        )
+        self.publish_slam_odom(stamp)
 
     def publish_slam_odom(self, stamp):
         odom = Odometry()
@@ -342,6 +474,15 @@ class LidarOdometry(Node):
         )
         return np.array([local_dx, local_dy, local_dtheta])
 
+    def compose_pose(self, pose, delta):
+        c = math.cos(pose[2])
+        s = math.sin(pose[2])
+        return np.array([
+            pose[0] + c * delta[0] - s * delta[1],
+            pose[1] + s * delta[0] + c * delta[1],
+            self.wrap_angle(pose[2] + delta[2]),
+        ])
+
     def pose_to_matrix(self, pose):
         c = math.cos(pose[2])
         s = math.sin(pose[2])
@@ -352,7 +493,7 @@ class LidarOdometry(Node):
     def transform_points(self, points, R, t):
         return (R @ points.T).T + t
 
-    def scan_to_points(self, scan_msg):
+    def scan_to_base_points(self, scan_msg):
         ranges = np.array(scan_msg.ranges, dtype=float)
         angles = (scan_msg.angle_min
                   + np.arange(len(ranges)) * scan_msg.angle_increment)
@@ -363,7 +504,44 @@ class LidarOdometry(Node):
         a = angles[valid]
         if r.size == 0:
             return np.empty((0, 2), dtype=float)
-        return np.column_stack((r * np.cos(a), r * np.sin(a)))
+        laser_points = np.column_stack((r * np.cos(a), r * np.sin(a)))
+        laser_to_base = self.lookup_laser_to_base(scan_msg.header.frame_id)
+        if laser_to_base is None:
+            return None
+
+        yaw, translation = laser_to_base
+        R, _ = self.pose_to_matrix(np.array([0.0, 0.0, yaw]))
+        return self.transform_points(laser_points, R, translation)
+
+    def lookup_laser_to_base(self, laser_frame):
+        try:
+            tf = self.tf_buffer.lookup_transform(
+                CHILD_FRAME,
+                laser_frame,
+                rclpy.time.Time(),
+            )
+        except (LookupException, ConnectivityException, ExtrapolationException):
+            if not self.warned_missing_laser_transform:
+                self.get_logger().warn(
+                    f'could not look up {CHILD_FRAME}->{laser_frame} transform; '
+                    'skipping ICP until TF is available'
+                )
+                self.warned_missing_laser_transform = True
+            return None
+
+        translation = np.array([
+            tf.transform.translation.x,
+            tf.transform.translation.y,
+        ])
+        q = tf.transform.rotation
+        yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
+        if not self.logged_laser_transform:
+            self.get_logger().info(
+                f'ICP scan frame transform: {laser_frame}->{CHILD_FRAME} '
+                f'x={translation[0]:.3f}, y={translation[1]:.3f}, yaw={yaw:.3f}'
+            )
+            self.logged_laser_transform = True
+        return yaw, translation
 
     def get_centroid(self, pts):
         return pts.mean(axis=0)
@@ -374,10 +552,22 @@ class LidarOdometry(Node):
         idxs = idxs[:, 0].astype(int)
         mask = dists < distance_threshold
         if mask.sum() < 3:
-            return None, None
+            return None, None, None
         matched_src = source_pts[mask]
         matched_tgt = self.prev_points[idxs[mask]]
-        return matched_src, matched_tgt
+        return matched_src, matched_tgt, dists[mask]
+
+    def yaw_from_quaternion(self, x, y, z, w):
+        return math.atan2(
+            2.0 * (w * z + x * y),
+            1.0 - 2.0 * (y * y + z * z)
+        )
+
+    def wrap_angle(self, angle):
+        return math.atan2(math.sin(angle), math.cos(angle))
+
+    def clamp(self, value, low, high):
+        return max(low, min(high, value))
 
 
 def main(args=None):

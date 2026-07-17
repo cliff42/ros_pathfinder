@@ -26,8 +26,13 @@ Options:
   --go-forward-3m                    Publish one /go_forward_3m trigger after startup.
   -h, --help                         Show this help.
 
+Environment:
+  SLAM_DEBUG_ICP=true                 Compute/log ICP without applying correction.
+  SLAM_USE_ICP_CORRECTION=true        Apply gated ICP correction to slam_odom.
+
 Examples:
   ./start_pathfinder_stack.sh
+  SLAM_DEBUG_ICP=true ./start_pathfinder_stack.sh --no-motors
   ./start_pathfinder_stack.sh --with-lidar sllidar_ros2 sllidar_a1_launch.py
   ./start_pathfinder_stack.sh --no-motors
 EOF
@@ -171,8 +176,15 @@ fi
 start_process odom_node ros2 run ros_pathfinder odom_node
 start_process lidar_static_tf ros2 run ros_pathfinder lidar_static_tf
 slam_cmd=(ros2 run ros_pathfinder slam_pose_estimator)
+slam_params=()
 if [[ -n "${SLAM_USE_ICP_CORRECTION:-}" ]]; then
-    slam_cmd+=(--ros-args -p "use_icp_correction:=$SLAM_USE_ICP_CORRECTION")
+    slam_params+=(-p "use_icp_correction:=$SLAM_USE_ICP_CORRECTION")
+fi
+if [[ -n "${SLAM_DEBUG_ICP:-}" ]]; then
+    slam_params+=(-p "debug_icp:=$SLAM_DEBUG_ICP")
+fi
+if [[ "${#slam_params[@]}" -gt 0 ]]; then
+    slam_cmd+=(--ros-args "${slam_params[@]}")
 fi
 start_process slam_pose_estimator "${slam_cmd[@]}"
 start_process occupancy ros2 run ros_pathfinder occupancy
