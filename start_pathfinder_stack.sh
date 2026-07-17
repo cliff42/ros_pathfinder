@@ -170,7 +170,11 @@ fi
 
 start_process odom_node ros2 run ros_pathfinder odom_node
 start_process lidar_static_tf ros2 run ros_pathfinder lidar_static_tf
-start_process slam_pose_estimator ros2 run ros_pathfinder slam_pose_estimator
+slam_cmd=(ros2 run ros_pathfinder slam_pose_estimator)
+if [[ -n "${SLAM_USE_ICP_CORRECTION:-}" ]]; then
+    slam_cmd+=(--ros-args -p "use_icp_correction:=$SLAM_USE_ICP_CORRECTION")
+fi
+start_process slam_pose_estimator "${slam_cmd[@]}"
 start_process occupancy ros2 run ros_pathfinder occupancy
 start_process planner ros2 run ros_pathfinder planner
 start_process path_follower ros2 run ros_pathfinder path_follower

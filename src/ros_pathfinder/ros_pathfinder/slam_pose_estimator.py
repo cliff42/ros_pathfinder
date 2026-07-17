@@ -21,8 +21,13 @@ class LidarOdometry(Node):
 
     def __init__(self):
         super().__init__('lidar_odometry')
+        self.use_icp_correction = bool(
+            self.declare_parameter('use_icp_correction', False).value
+        )
         self.slam_odom_publisher = self.create_publisher(Odometry, 'slam_odom', 10)
-        self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
+        self.scan_subscriber = None
+        if self.use_icp_correction:
+            self.scan_subscriber = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
         self.odom_subscriber = self.create_subscription(Odometry, 'raw_odom', self.odom_callback, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.prev_points_tree = None
@@ -64,6 +69,10 @@ class LidarOdometry(Node):
         self.last_v = 0.0
         self.last_w = 0.0
 
+        self.get_logger().info(
+            f'slam pose estimator mode: use_icp_correction={self.use_icp_correction}'
+        )
+
     # EKF predict step
     def odom_callback(self, msg: Odometry):
         now = rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
@@ -74,12 +83,14 @@ class LidarOdometry(Node):
             self.icp_x = float(self.mu[0])
             self.icp_y = float(self.mu[1])
             self.icp_theta = float(self.mu[2])
+            self.publish_correction_tf(msg.header.stamp)
             self.publish_slam_odom(msg.header.stamp)
             return
         dt = now - self.last_odom_time
         self.last_odom_time = now
         if dt <= 0.0:
             self.store_latest_odom_pose(msg)
+            self.publish_correction_tf(msg.header.stamp)
             self.publish_slam_odom(msg.header.stamp)
             return
 
@@ -101,6 +112,15 @@ class LidarOdometry(Node):
         self.last_w = w
 
         self.store_latest_odom_pose(msg)
+
+        if not self.use_icp_correction:
+            self.mu = self.latest_odom_pose.copy()
+            self.corr_x = 0.0
+            self.corr_y = 0.0
+            self.corr_theta = 0.0
+            self.publish_correction_tf(msg.header.stamp)
+            self.publish_slam_odom(msg.header.stamp)
+            return
 
         # propagate state with differential-drive motion model
         self.mu[0] += v * math.cos(theta) * dt # robot x pos
@@ -125,8 +145,12 @@ class LidarOdometry(Node):
             Q = self.Q * dt
         self.P = F @ self.P @ F.T + Q
 
+        self.publish_correction_tf(msg.header.stamp)
+        self.publish_slam_odom(msg.header.stamp)
+
+    def publish_correction_tf(self, stamp):
         corr_tf = TransformStamped()
-        corr_tf.header.stamp = msg.header.stamp
+        corr_tf.header.stamp = stamp
         corr_tf.header.frame_id = HEADER_FRAME
         corr_tf.child_frame_id = RAW_ODOM_FRAME
         corr_tf.transform.translation.x = self.corr_x
@@ -137,7 +161,6 @@ class LidarOdometry(Node):
         corr_tf.transform.rotation.z = math.sin(self.corr_theta / 2.0)
         corr_tf.transform.rotation.w = math.cos(self.corr_theta / 2.0)
         self.tf_broadcaster.sendTransform(corr_tf)
-        self.publish_slam_odom(msg.header.stamp)
 
     # EKF update/ correction step
     def scan_callback(self, msg: LaserScan):
