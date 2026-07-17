@@ -18,7 +18,7 @@ WHEEL_BASE_M = 0.55 # measured distance between wheels
 DEFAULT_INITIAL_HEADING_RAD = math.pi
 
 LEFT_ENCODER_SIGN = -1.0
-RIGHT_ENCODER_SIGN = -1.0
+RIGHT_ENCODER_SIGN = 1.0
 
 i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
 
