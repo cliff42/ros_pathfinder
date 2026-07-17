@@ -32,6 +32,12 @@ class MotorControlServer(Node):
         self.use_odom_feedback = bool(
             self.declare_parameter('use_odom_feedback', False).value
         )
+        self.linear_sign = float(self.declare_parameter('linear_sign', 1.0).value)
+        self.angular_sign = float(self.declare_parameter('angular_sign', 1.0).value)
+        self.left_motor_sign = float(self.declare_parameter('left_motor_sign', 1.0).value)
+        self.right_motor_sign = float(self.declare_parameter('right_motor_sign', 1.0).value)
+        self.left_motor_scale = float(self.declare_parameter('left_motor_scale', 1.0).value)
+        self.right_motor_scale = float(self.declare_parameter('right_motor_scale', 1.0).value)
 
         self.create_subscription(Odometry, 'raw_odom', self._odom_cb, 10,
                                  callback_group=self.cb_group)
@@ -52,7 +58,12 @@ class MotorControlServer(Node):
         self._motors_stopped = True
         self._last_log_time = self.get_clock().now()
         self.get_logger().info(
-            f'controller mode: use_odom_feedback={self.use_odom_feedback}'
+            f'controller mode: use_odom_feedback={self.use_odom_feedback}, '
+            f'linear_sign={self.linear_sign}, angular_sign={self.angular_sign}, '
+            f'left_motor_sign={self.left_motor_sign}, '
+            f'right_motor_sign={self.right_motor_sign}, '
+            f'left_motor_scale={self.left_motor_scale}, '
+            f'right_motor_scale={self.right_motor_scale}'
         )
 
         # 20 Hz control loop
@@ -81,8 +92,8 @@ class MotorControlServer(Node):
             return
 
         # 
-        v = self._cmd_vel.linear.x
-        w = self._cmd_vel.angular.z
+        v = self.linear_sign * self._cmd_vel.linear.x
+        w = self.angular_sign * self._cmd_vel.angular.z
         if abs(v) < 1e-3 and abs(w) < 1e-3:
             self.publish_stop_once()
             return
@@ -151,17 +162,28 @@ class MotorControlServer(Node):
             self._last_cmd_l = left_speed
             self._last_cmd_r = right_speed
 
-        if self.same_as_last_publish(left_speed, right_speed) and not force:
-            return left_speed, right_speed
+        publish_left = self.clamp(
+            left_speed * self.left_motor_sign * self.left_motor_scale,
+            -self.MAX_MOTOR_CMD,
+            self.MAX_MOTOR_CMD,
+        )
+        publish_right = self.clamp(
+            right_speed * self.right_motor_sign * self.right_motor_scale,
+            -self.MAX_MOTOR_CMD,
+            self.MAX_MOTOR_CMD,
+        )
 
-        left_msg = Float64();  left_msg.data  = left_speed
-        right_msg = Float64(); right_msg.data = right_speed
+        if self.same_as_last_publish(publish_left, publish_right) and not force:
+            return publish_left, publish_right
+
+        left_msg = Float64();  left_msg.data  = publish_left
+        right_msg = Float64(); right_msg.data = publish_right
         self.left_motor_publisher.publish(left_msg)
         self.right_motor_publisher.publish(right_msg)
-        self._last_published_l = left_speed
-        self._last_published_r = right_speed
-        self._motors_stopped = abs(left_speed) < self.MOTOR_CMD_EPSILON and abs(right_speed) < self.MOTOR_CMD_EPSILON
-        return left_speed, right_speed
+        self._last_published_l = publish_left
+        self._last_published_r = publish_right
+        self._motors_stopped = abs(publish_left) < self.MOTOR_CMD_EPSILON and abs(publish_right) < self.MOTOR_CMD_EPSILON
+        return publish_left, publish_right
 
     def slew_limit(self, target, current):
         if abs(target) < self.MOTOR_CMD_EPSILON:

@@ -177,7 +177,31 @@ start_process path_follower ros2 run ros_pathfinder path_follower
 start_process goal_picker ros2 run ros_pathfinder goal_picker
 
 if [[ "$START_MOTORS" -eq 1 ]]; then
-    start_process controller ros2 run ros_pathfinder controller
+    controller_cmd=(ros2 run ros_pathfinder controller)
+    controller_params=()
+    if [[ -n "${CONTROLLER_LINEAR_SIGN:-}" ]]; then
+        controller_params+=(-p "linear_sign:=$CONTROLLER_LINEAR_SIGN")
+    fi
+    if [[ -n "${CONTROLLER_ANGULAR_SIGN:-}" ]]; then
+        controller_params+=(-p "angular_sign:=$CONTROLLER_ANGULAR_SIGN")
+    fi
+    if [[ -n "${CONTROLLER_LEFT_MOTOR_SIGN:-}" ]]; then
+        controller_params+=(-p "left_motor_sign:=$CONTROLLER_LEFT_MOTOR_SIGN")
+    fi
+    if [[ -n "${CONTROLLER_RIGHT_MOTOR_SIGN:-}" ]]; then
+        controller_params+=(-p "right_motor_sign:=$CONTROLLER_RIGHT_MOTOR_SIGN")
+    fi
+    if [[ -n "${CONTROLLER_LEFT_MOTOR_SCALE:-}" ]]; then
+        controller_params+=(-p "left_motor_scale:=$CONTROLLER_LEFT_MOTOR_SCALE")
+    fi
+    if [[ -n "${CONTROLLER_RIGHT_MOTOR_SCALE:-}" ]]; then
+        controller_params+=(-p "right_motor_scale:=$CONTROLLER_RIGHT_MOTOR_SCALE")
+    fi
+    if [[ "${#controller_params[@]}" -gt 0 ]]; then
+        controller_cmd+=(--ros-args "${controller_params[@]}")
+    fi
+
+    start_process controller "${controller_cmd[@]}"
     start_process motor_controller ros2 run ros_pathfinder motor_controller
 else
     echo "motors disabled: controller and motor_controller were not started"

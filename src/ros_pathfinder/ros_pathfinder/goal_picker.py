@@ -156,10 +156,13 @@ class GoalPicker(Node):
         future.add_done_callback(self.forward_path_goal_response)
 
         final_pose = path.poses[-1].pose.position
+        first_pose = path.poses[0].pose.position
         self.get_logger().info(
             f'sent straight forward path: distance={self.forward_distance:.3f}, '
-            f'waypoints={len(path.poses)}, x={final_pose.x:.3f}, '
-            f'y={final_pose.y:.3f}, yaw={self.robot_yaw:.3f}, '
+            f'waypoints={len(path.poses)}, '
+            f'from=({self.robot_x:.3f}, {self.robot_y:.3f}, yaw={self.robot_yaw:.3f}), '
+            f'first=({first_pose.x:.3f}, {first_pose.y:.3f}), '
+            f'final=({final_pose.x:.3f}, {final_pose.y:.3f}), '
             f'frame={path.header.frame_id}'
         )
 
