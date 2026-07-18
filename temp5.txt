@@ -1,0 +1,35 @@
+pirobot@pirobot-desktop:~/git/ros_pathfinder$ python3 scripts/analyze_icp_logs.py log/stack_20260718_130745
+log_dir=log/stack_20260718_130745
+ICP
+  [INFO] [1784394477.670231740] [lidar_odometry]: slam pose estimator mode: use_icp_correction=True, debug_icp=True
+  samples=232 applies=183 debug_only=0 stationary_rejects=41
+  rejects: below_motion_threshold=8
+  v: n=191 min=0.00000 median=0.16977 max=0.37015
+  w: n=191 min=-0.63353 median=-0.08501 max=0.67401
+  icp_dx: n=191 min=-0.00023 median=0.01459 max=0.03285
+  icp_dy: n=191 min=-0.00454 median=0.00026 max=0.00889
+  icp_dtheta: n=191 min=-0.04649 median=-0.00811 max=0.06371
+  odom_x: n=191 min=-3.05900 median=-1.63100 max=-0.00000
+  odom_y: n=191 min=-0.05400 median=0.00300 max=0.05400
+  mu_x: n=191 min=-2.94800 median=-1.57200 max=-0.00000
+  mu_y: n=191 min=-0.06400 median=-0.00500 max=0.05100
+  odom_dx: n=191 min=0.00016 median=0.01774 max=0.03026
+  odom_dy: n=191 min=-0.00036 median=-0.00004 max=0.00076
+  odom_dtheta: n=191 min=-0.04449 median=-0.00583 max=0.06631
+  trans_err: n=191 min=0.00009 median=0.00426 max=0.01407
+  rot_err: n=191 min=-0.00556 median=0.00013 max=0.00490
+  rmse: n=191 min=0.00164 median=0.01060 max=0.01543
+  matches: n=191 min=360.00000 median=399.00000 max=436.00000
+  first pose: odom=(-0.000, -0.000, 3.141) mu=(-0.000, -0.000, 3.141)
+  last pose:  odom=(-3.059, 0.050, 3.055) mu=(-2.948, 0.022, 3.058)
+  final odom-vs-mu distance: 0.114 m
+Path follower
+  samples=329
+  heading_error: n=329 min=-0.35400 median=0.01000 max=0.43500
+  v: n=329 min=0.10900 median=0.11800 max=0.12000
+  w: n=329 min=-0.35400 median=0.01000 max=0.43500
+  x: n=329 min=-2.91800 median=-1.55000 max=0.00000
+  y: n=329 min=-0.06500 median=-0.00800 max=0.05000
+  yaw: n=329 min=-3.13700 median=2.78600 max=3.14200
+  last target=14/14 pose=(-2.918, 0.019, yaw=2.939)
+
