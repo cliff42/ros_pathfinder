@@ -125,7 +125,7 @@ def print_icp_summary(rows, rejects, applies, debug_only, stationary, mode):
     for key in ["v", "w", "icp_dx", "icp_dy", "icp_dtheta", "odom_x", "odom_y", "mu_x", "mu_y"]:
         print("  " + stat_line(key, [row[key] for row in sample if key in row]))
     if "trans_err" in sample[0]:
-        for key in ["odom_dx", "odom_dy", "odom_dtheta", "trans_err", "rot_err", "rmse"]:
+        for key in ["odom_dx", "odom_dy", "odom_dtheta", "trans_err", "rot_err", "rmse", "matches"]:
             print("  " + stat_line(key, [row[key] for row in sample if key in row]))
     first = sample[0]
     last = sample[-1]

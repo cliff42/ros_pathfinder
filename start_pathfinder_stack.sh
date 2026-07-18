@@ -29,6 +29,10 @@ Options:
 Environment:
   SLAM_DEBUG_ICP=true                 Compute/log ICP without applying correction.
   SLAM_USE_ICP_CORRECTION=true        Apply gated ICP correction to slam_odom.
+  SLAM_ICP_CORRECTION_GAIN=0.18       Override ICP correction gain.
+  SLAM_ICP_MAX_RMSE=0.065             Override max accepted ICP RMSE.
+  PATH_FOLLOWER_LOOKAHEAD_DIST=0.35   Override path follower lookahead.
+  PATH_FOLLOWER_ANGULAR_GAIN=1.0      Override path follower angular gain.
 
 Examples:
   ./start_pathfinder_stack.sh
@@ -183,13 +187,51 @@ fi
 if [[ -n "${SLAM_DEBUG_ICP:-}" ]]; then
     slam_params+=(-p "debug_icp:=$SLAM_DEBUG_ICP")
 fi
+if [[ -n "${SLAM_ICP_CORRECTION_GAIN:-}" ]]; then
+    slam_params+=(-p "icp_correction_gain:=$SLAM_ICP_CORRECTION_GAIN")
+fi
+if [[ -n "${SLAM_ICP_MAX_RMSE:-}" ]]; then
+    slam_params+=(-p "max_icp_rmse:=$SLAM_ICP_MAX_RMSE")
+fi
+if [[ -n "${SLAM_ICP_MATCH_DISTANCE:-}" ]]; then
+    slam_params+=(-p "icp_match_distance:=$SLAM_ICP_MATCH_DISTANCE")
+fi
+if [[ -n "${SLAM_ICP_TRIM_FRACTION:-}" ]]; then
+    slam_params+=(-p "icp_trim_fraction:=$SLAM_ICP_TRIM_FRACTION")
+fi
+if [[ -n "${SLAM_ICP_MAX_TRANSLATION_ERROR:-}" ]]; then
+    slam_params+=(-p "max_icp_translation_error:=$SLAM_ICP_MAX_TRANSLATION_ERROR")
+fi
+if [[ -n "${SLAM_ICP_MAX_ROTATION_ERROR:-}" ]]; then
+    slam_params+=(-p "max_icp_rotation_error:=$SLAM_ICP_MAX_ROTATION_ERROR")
+fi
 if [[ "${#slam_params[@]}" -gt 0 ]]; then
     slam_cmd+=(--ros-args "${slam_params[@]}")
 fi
 start_process slam_pose_estimator "${slam_cmd[@]}"
 start_process occupancy ros2 run ros_pathfinder occupancy
 start_process planner ros2 run ros_pathfinder planner
-start_process path_follower ros2 run ros_pathfinder path_follower
+path_follower_cmd=(ros2 run ros_pathfinder path_follower)
+path_follower_params=()
+if [[ -n "${PATH_FOLLOWER_LINEAR_VEL:-}" ]]; then
+    path_follower_params+=(-p "linear_vel:=$PATH_FOLLOWER_LINEAR_VEL")
+fi
+if [[ -n "${PATH_FOLLOWER_GOAL_TOL:-}" ]]; then
+    path_follower_params+=(-p "goal_tol:=$PATH_FOLLOWER_GOAL_TOL")
+fi
+if [[ -n "${PATH_FOLLOWER_LOOKAHEAD_DIST:-}" ]]; then
+    path_follower_params+=(-p "lookahead_dist:=$PATH_FOLLOWER_LOOKAHEAD_DIST")
+fi
+if [[ -n "${PATH_FOLLOWER_ANGULAR_GAIN:-}" ]]; then
+    path_follower_params+=(-p "angular_gain:=$PATH_FOLLOWER_ANGULAR_GAIN")
+fi
+if [[ -n "${PATH_FOLLOWER_MAX_ANGULAR_VEL:-}" ]]; then
+    path_follower_params+=(-p "max_angular_vel:=$PATH_FOLLOWER_MAX_ANGULAR_VEL")
+fi
+if [[ "${#path_follower_params[@]}" -gt 0 ]]; then
+    path_follower_cmd+=(--ros-args "${path_follower_params[@]}")
+fi
+start_process path_follower "${path_follower_cmd[@]}"
 start_process goal_picker ros2 run ros_pathfinder goal_picker
 
 if [[ "$START_MOTORS" -eq 1 ]]; then

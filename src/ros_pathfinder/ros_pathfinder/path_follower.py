@@ -31,11 +31,22 @@ class PathFollower(Node):
         self.odom_y = None
         self.odom_yaw = None
 
-        self.LINEAR_VEL = 0.12
-        self.GOAL_TOL = 0.08
-        self.LOOKAHEAD_DIST = 0.20
-        self.ANGULAR_GAIN = 1.5
-        self.MAX_ANGULAR_VEL = 0.7
+        self.LINEAR_VEL = float(self.declare_parameter('linear_vel', 0.12).value)
+        self.GOAL_TOL = float(self.declare_parameter('goal_tol', 0.08).value)
+        self.LOOKAHEAD_DIST = float(
+            self.declare_parameter('lookahead_dist', 0.35).value
+        )
+        self.ANGULAR_GAIN = float(self.declare_parameter('angular_gain', 1.0).value)
+        self.MAX_ANGULAR_VEL = float(
+            self.declare_parameter('max_angular_vel', 0.45).value
+        )
+        self.get_logger().info(
+            f'path follower params: linear_vel={self.LINEAR_VEL:.3f}, '
+            f'goal_tol={self.GOAL_TOL:.3f}, '
+            f'lookahead_dist={self.LOOKAHEAD_DIST:.3f}, '
+            f'angular_gain={self.ANGULAR_GAIN:.3f}, '
+            f'max_angular_vel={self.MAX_ANGULAR_VEL:.3f}'
+        )
 
     def _odom_cb(self, msg: Odometry):
         q = msg.pose.pose.orientation

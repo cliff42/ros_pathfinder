@@ -43,25 +43,31 @@ class LidarOdometry(Node):
             self.declare_parameter('min_icp_rotation', 0.003).value
         )
         self.min_icp_matches = int(
-            self.declare_parameter('min_icp_matches', 20).value
+            self.declare_parameter('min_icp_matches', 40).value
+        )
+        self.icp_match_distance = float(
+            self.declare_parameter('icp_match_distance', 0.20).value
+        )
+        self.icp_trim_fraction = float(
+            self.declare_parameter('icp_trim_fraction', 0.70).value
         )
         self.max_icp_rmse = float(
-            self.declare_parameter('max_icp_rmse', 0.08).value
+            self.declare_parameter('max_icp_rmse', 0.065).value
         )
         self.max_icp_translation_error = float(
-            self.declare_parameter('max_icp_translation_error', 0.10).value
+            self.declare_parameter('max_icp_translation_error', 0.04).value
         )
         self.max_icp_rotation_error = float(
-            self.declare_parameter('max_icp_rotation_error', 0.25).value
+            self.declare_parameter('max_icp_rotation_error', 0.04).value
         )
         self.max_icp_translation_correction = float(
-            self.declare_parameter('max_icp_translation_correction', 0.03).value
+            self.declare_parameter('max_icp_translation_correction', 0.015).value
         )
         self.max_icp_rotation_correction = float(
-            self.declare_parameter('max_icp_rotation_correction', 0.08).value
+            self.declare_parameter('max_icp_rotation_correction', 0.035).value
         )
         self.icp_correction_gain = float(
-            self.declare_parameter('icp_correction_gain', 0.35).value
+            self.declare_parameter('icp_correction_gain', 0.18).value
         )
 
         self.slam_odom_publisher = self.create_publisher(Odometry, 'slam_odom', 10)
@@ -546,16 +552,25 @@ class LidarOdometry(Node):
     def get_centroid(self, pts):
         return pts.mean(axis=0)
 
-    def get_matches(self, source_pts, distance_threshold=0.3):
+    def get_matches(self, source_pts):
         dists, idxs = self.prev_points_tree.query(source_pts, k=1)
         dists = dists[:, 0]
         idxs = idxs[:, 0].astype(int)
-        mask = dists < distance_threshold
+        mask = dists < self.icp_match_distance
         if mask.sum() < 3:
             return None, None, None
-        matched_src = source_pts[mask]
-        matched_tgt = self.prev_points[idxs[mask]]
-        return matched_src, matched_tgt, dists[mask]
+
+        matched_dists = dists[mask]
+        matched_source_idxs = np.nonzero(mask)[0]
+        keep_count = int(math.ceil(matched_dists.size * self.icp_trim_fraction))
+        keep_count = max(3, min(matched_dists.size, keep_count))
+        keep_order = np.argsort(matched_dists)[:keep_count]
+
+        source_keep = matched_source_idxs[keep_order]
+        target_keep = idxs[mask][keep_order]
+        matched_src = source_pts[source_keep]
+        matched_tgt = self.prev_points[target_keep]
+        return matched_src, matched_tgt, matched_dists[keep_order]
 
     def yaw_from_quaternion(self, x, y, z, w):
         return math.atan2(
