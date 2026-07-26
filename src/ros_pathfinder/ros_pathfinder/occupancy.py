@@ -146,7 +146,7 @@ class OccupancyMapper(Node):
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
-            if (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
+            if (angle < (3*math.pi / 2) and angle > (math.pi / 2)) and (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
                 angle += msg.angle_increment
                 continue
             else:
