@@ -59,7 +59,7 @@ class OccupancyMapper(Node):
 
         self.grid = [-1] * (self.width * self.height)
         self.inflated_grid = [-1] * (self.width * self.height)
-        self.inflation_radius_cells = 3
+        self.inflation_radius_cells = 5
 
         self.timer_period = 1.0  # seconds
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
@@ -92,14 +92,20 @@ class OccupancyMapper(Node):
                 angle += msg.angle_increment
                 continue
 
+            base_x = laser_x - 0.32*math.cos(laser_yaw)
+            base_y = laser_y - 0.32*math.sin(laser_yaw)
+
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
-            # convert to grid coords
-            scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
+            if (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
+                angle += msg.angle_increment
+                continue
+            else:
+                # convert to grid coords
+                scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
 
-            self.update_ray(start_x, start_y, scan_x, scan_y)
-
+                self.update_ray(start_x, start_y, scan_x, scan_y)
             angle += msg.angle_increment
 
         self.grid = self.log_odds_to_occupancy_grid()
@@ -246,8 +252,8 @@ class OccupancyMapper(Node):
         msg.info.origin.position.z = 0.0
         msg.info.origin.orientation.w = 1.0
 
-        msg.data = self.grid
-        # msg.data = self.inflated_grid
+        # msg.data = self.grid
+        msg.data = self.inflated_grid
 
         self.map_publisher.publish(msg)
         self.get_logger().info(
