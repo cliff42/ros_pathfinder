@@ -140,10 +140,20 @@ class OccupancyMapper(Node):
                 angle += msg.angle_increment
                 continue
 
+            base_x = laser_x - 0.32*math.cos(laser_yaw)
+            base_y = laser_y - 0.32*math.sin(laser_yaw)
+
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
-            # convert to grid coords
+            if (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
+                angle += msg.angle_increment
+                continue
+            else:
+                # convert to grid coords
+                scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
+                self.update_ray(start_x, start_y, scan_x, scan_y)
+
             scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
             self.update_ray(start_x, start_y, scan_x, scan_y)
             angle += msg.angle_increment
