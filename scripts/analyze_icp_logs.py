@@ -31,7 +31,7 @@ FOLLOW_RE = re.compile(
     r"follow target=(?P<target>[0-9]+)/(?P<last>[0-9]+), "
     r"pose=\((?P<x>[-0-9.]+), (?P<y>[-0-9.]+), yaw=(?P<yaw>[-0-9.]+)\), "
     r".*heading_error=(?P<heading_error>[-0-9.]+), "
-    r"v=(?P<v>[-0-9.]+), w=(?P<w>[-0-9.]+)"
+    r"v=(?P<v>[-0-9.]+),[^\n]*\bw=(?P<w>[-0-9.]+)"
 )
 
 CMD_LINEAR_RE = re.compile(r"linear:\s*\n\s*x: (?P<x>[-0-9.eE]+)", re.MULTILINE)
@@ -76,7 +76,7 @@ def parse_icp(path):
             reason_match = re.search(r"reason=([a-z_]+)", line)
             reason = reason_match.group(1) if reason_match else "unknown"
             rejects[reason] = rejects.get(reason, 0) + 1
-        if "ICP_APPLY" in line:
+        if "ICP_APPLY" in line or "ICP_EKF_APPLY" in line:
             applies += 1
         if "ICP_DEBUG_ONLY" in line:
             debug_only += 1

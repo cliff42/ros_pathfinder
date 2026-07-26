@@ -12,14 +12,14 @@ import threading
 
 
 class MotorControlServer(Node):
-    WHEELBASE     = 0.55        # distance between wheels
+    DEFAULT_WHEEL_TRACK_M = 0.24
     WHEEL_RADIUS  = 4 * 0.0254
     MAX_WHEEL_VEL = 0.5         # TODO: measure based on hw
     MAX_MOTOR_CMD = 0.2
     MIN_MOTOR_CMD = 0.08        # overcome motor static friction/stiction
     MIN_WHEEL_VEL = 0.01        # m/s; ignore tiny wheel requests
     MAX_CMD_STEP  = 0.01        # duty-cycle change per control tick
-    KP            = 0.4         # motor command per m/s of wheel-speed error
+    DEFAULT_KP    = 0.35        # motor command per m/s of wheel-speed error
     LOG_PERIOD    = 1.0         # seconds
     MOTOR_CMD_EPSILON = 0.002
 
@@ -30,8 +30,31 @@ class MotorControlServer(Node):
         self.right_motor_publisher = self.create_publisher(Float64, 'right_motor', 10)
         self.data_lock = threading.Lock()
         self.use_odom_feedback = bool(
-            self.declare_parameter('use_odom_feedback', False).value
+            self.declare_parameter('use_odom_feedback', True).value
         )
+        self.kp = float(
+            self.declare_parameter('kp', self.DEFAULT_KP).value
+        )
+        self.velocity_filter_alpha = float(
+            self.declare_parameter('velocity_filter_alpha', 0.20).value
+        )
+        self.max_feedback_correction = float(
+            self.declare_parameter('max_feedback_correction', 0.05).value
+        )
+        if self.kp < 0.0:
+            raise ValueError('kp cannot be negative')
+        if not 0.0 < self.velocity_filter_alpha <= 1.0:
+            raise ValueError('velocity_filter_alpha must be in (0.0, 1.0]')
+        if self.max_feedback_correction < 0.0:
+            raise ValueError('max_feedback_correction cannot be negative')
+        self.wheel_track_m = float(
+            self.declare_parameter(
+                'wheel_track_m',
+                self.DEFAULT_WHEEL_TRACK_M,
+            ).value
+        )
+        if self.wheel_track_m <= 0.0:
+            raise ValueError('wheel_track_m must be greater than zero')
         self.linear_sign = float(self.declare_parameter('linear_sign', 1.0).value)
         self.angular_sign = float(self.declare_parameter('angular_sign', 1.0).value)
         self.left_motor_sign = float(self.declare_parameter('left_motor_sign', 1.0).value)
@@ -51,6 +74,7 @@ class MotorControlServer(Node):
         # Measured wheel velocities (m/s), updated by _odom_cb
         self._vel_l = 0.0
         self._vel_r = 0.0
+        self._have_velocity_measurement = False
         self._last_cmd_l = 0.0
         self._last_cmd_r = 0.0
         self._last_published_l = None
@@ -59,6 +83,10 @@ class MotorControlServer(Node):
         self._last_log_time = self.get_clock().now()
         self.get_logger().info(
             f'controller mode: use_odom_feedback={self.use_odom_feedback}, '
+            f'wheel_track_m={self.wheel_track_m}, '
+            f'kp={self.kp}, velocity_filter_alpha='
+            f'{self.velocity_filter_alpha}, '
+            f'max_feedback_correction={self.max_feedback_correction}, '
             f'linear_sign={self.linear_sign}, angular_sign={self.angular_sign}, '
             f'left_motor_sign={self.left_motor_sign}, '
             f'right_motor_sign={self.right_motor_sign}, '
@@ -76,9 +104,17 @@ class MotorControlServer(Node):
     def _odom_cb(self, msg: Odometry):
         v = msg.twist.twist.linear.x
         w = msg.twist.twist.angular.z
+        measured_l = v - w * self.wheel_track_m / 2.0
+        measured_r = v + w * self.wheel_track_m / 2.0
         with self.data_lock:
-            self._vel_l = v - w * self.WHEELBASE / 2.0
-            self._vel_r = v + w * self.WHEELBASE / 2.0
+            if not self._have_velocity_measurement:
+                self._vel_l = measured_l
+                self._vel_r = measured_r
+                self._have_velocity_measurement = True
+            else:
+                alpha = self.velocity_filter_alpha
+                self._vel_l += alpha * (measured_l - self._vel_l)
+                self._vel_r += alpha * (measured_r - self._vel_r)
 
         # self.get_logger().info('left wheel speed: "%s" right wheel speed: "%s"' % (str(self._vel_l),str(self._vel_r)))
 
@@ -99,8 +135,8 @@ class MotorControlServer(Node):
             return
 
         # desired linear speeds
-        v_left  = v - w * self.WHEELBASE / 2.0
-        v_right = v + w * self.WHEELBASE / 2.0
+        v_left  = v - w * self.wheel_track_m / 2.0
+        v_right = v + w * self.wheel_track_m / 2.0
 
         if self.use_odom_feedback:
             with self.data_lock:
@@ -132,7 +168,11 @@ class MotorControlServer(Node):
             self.MAX_MOTOR_CMD - self.MIN_MOTOR_CMD
         )
         feedforward = math.copysign(feedforward_mag, desired_velocity)
-        correction = self.KP * velocity_error
+        correction = self.clamp(
+            self.kp * velocity_error,
+            -self.max_feedback_correction,
+            self.max_feedback_correction,
+        )
         command = feedforward + correction
 
         if desired_velocity > 0.0:

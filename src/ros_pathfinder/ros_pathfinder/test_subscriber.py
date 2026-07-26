@@ -2,13 +2,14 @@ from time import sleep
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
 
 
 import math
 
 from std_msgs.msg import Float64MultiArray
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Imu, LaserScan
 
 class MinimalSubscriber(Node):
     
@@ -31,7 +32,12 @@ class MinimalSubscriber(Node):
     def __init__(self):
         super().__init__('minimal_subscriber')
         self.subscription = self.create_subscription(Float64MultiArray,'test_topic',self.listener_callback,10)
-        self.subscription2 = self.create_subscription(Float64MultiArray,'imu_topic',self.listener_callback2,10)
+        self.subscription2 = self.create_subscription(
+            Imu,
+            'imu/data_raw',
+            self.listener_callback2,
+            qos_profile_sensor_data,
+        )
         self.subscription3 = self.create_subscription(LaserScan, 'scan', self.listener_callback3, 10)
         self.subscription  # prevent unused variable warning
 
@@ -61,14 +67,13 @@ class MinimalSubscriber(Node):
         
 
         self.count += 1
-    def listener_callback2(self,msg):
-        acc_x = float(msg.data[0])
-        acc_y = float(msg.data[1])
-        acc_z = float(msg.data[2])
-        gyr_x = float(msg.data[3])
-        gyr_y = float(msg.data[4])
-        gyr_z = float(msg.data[5])
-        timer_period = float(msg.data[6])
+    def listener_callback2(self, msg):
+        acc_x = float(msg.linear_acceleration.x)
+        acc_y = float(msg.linear_acceleration.y)
+        acc_z = float(msg.linear_acceleration.z)
+        gyr_x = float(msg.angular_velocity.x)
+        gyr_y = float(msg.angular_velocity.y)
+        gyr_z = float(msg.angular_velocity.z)
         # self.get_logger().info('acc_x : "%s" m/s^2 acc_y: "%s" m/s^2 acc_z: "%s" m/s^2' % (acc_x,acc_y,acc_z))
         # self.get_logger().info('gyr_x : "%s" rad/s gyr_y: "%s" rad/s gyr_z: "%s" rad/s' % (gyr_x,gyr_y,gyr_z))
 

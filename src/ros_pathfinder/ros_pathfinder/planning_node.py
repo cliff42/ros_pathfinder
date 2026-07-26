@@ -22,6 +22,16 @@ class PathPlanner(Node):
         self.start_pose = None
         self.map_frame = self.declare_parameter('map_frame', 'slam_odom').value
         self.allow_unknown = bool(self.declare_parameter('allow_unknown', True).value)
+        self.unknown_cost_multiplier = float(
+            self.declare_parameter('unknown_cost_multiplier', 3.0).value
+        )
+        self.path_spacing = float(
+            self.declare_parameter('path_spacing', 0.10).value
+        )
+        if self.unknown_cost_multiplier < 1.0:
+            raise ValueError('unknown_cost_multiplier must be at least 1.0')
+        if self.path_spacing <= 0.0:
+            raise ValueError('path_spacing must be greater than zero')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -67,18 +77,40 @@ class PathPlanner(Node):
         self.create_subscription(PoseStamped,"/goal_pose",self.setGoal,10)
         self._action_client = ActionClient(self,FollowPath,'follow_path')
         self.path_goal_in_flight = False
+        self.active_goal_handle = None
+        self.current_path = None
+        self.current_path_generation = None
+        self.goal_generation = 0
+        self.replan_requested = False
+        self.cancel_in_flight = False
+        self.latest_occupancy_grid = None
 
         self.path_publisher = self.create_publisher(Path,"path",10)
 
         self.resolution = 0.05
+        self.get_logger().info(
+            f'planner params: allow_unknown={self.allow_unknown}, '
+            f'unknown_cost_multiplier={self.unknown_cost_multiplier:.2f}, '
+            f'path_spacing={self.path_spacing:.3f}'
+        )
 
     
     
     def planPath(self, occupancy_grid: OccupancyGrid):
+        self.latest_occupancy_grid = occupancy_grid
+
         # wait until we have a goal & have odom data
         if self.start_pose is None or self.goal_pose is None:
             return
         if self.path_goal_in_flight:
+            if (
+                self.current_path is not None
+                and not self.remaining_path_is_traversable(
+                    occupancy_grid,
+                    self.current_path,
+                )
+            ):
+                self.request_replan('remaining path is blocked')
             return
 
         self.map_frame = occupancy_grid.header.frame_id or self.map_frame
@@ -153,10 +185,26 @@ class PathPlanner(Node):
                     if not self.is_traversable(occupancy_grid.data[adjacent]):
                         continue
 
+                    if dx != 0 and dy != 0:
+                        horizontal = adjacent_x + current_y * width
+                        vertical = current_x + adjacent_y * width
+                        if (
+                            not self.is_traversable(
+                                occupancy_grid.data[horizontal]
+                            )
+                            or not self.is_traversable(
+                                occupancy_grid.data[vertical]
+                            )
+                        ):
+                            continue
+
                     if adjacent in closed:
                         continue
 
-                    new_cost = cost + g[current]
+                    cell_multiplier = self.cell_cost_multiplier(
+                        occupancy_grid.data[adjacent]
+                    )
+                    new_cost = cost * cell_multiplier + g[current]
                     if new_cost < g.get(adjacent,float('inf')):
                         g[adjacent] = new_cost
                         f[adjacent] = new_cost + self.heuristic(
@@ -240,8 +288,10 @@ class PathPlanner(Node):
     
     def setGoal(self, pose: PoseStamped):
         self.goal_pose = pose
+        self.goal_generation += 1
         self.goal = None
-        self.path_goal_in_flight = False
+        if self.path_goal_in_flight:
+            self.request_replan('new goal received')
 
         yaw = self.yaw_from_quaternion(
             pose.pose.orientation.x,
@@ -290,8 +340,17 @@ class PathPlanner(Node):
             node = came_from[node]
         path_nodes.reverse()
 
-        for node in path_nodes:
-            x, y = self.grid_index_to_world(occupancy_grid, node)
+        simplified_nodes = self.simplify_path_nodes(
+            path_nodes,
+            occupancy_grid,
+        )
+        world_points = [
+            self.grid_index_to_world(occupancy_grid, path_node)
+            for path_node in simplified_nodes
+        ]
+        output_points = self.interpolate_path(world_points)
+
+        for x, y in output_points:
             pose = PoseStamped()
             pose.header.stamp = path.header.stamp
             pose.header.frame_id = self.map_frame
@@ -304,7 +363,222 @@ class PathPlanner(Node):
             pose.pose.orientation.w = 1.0
             path.poses.append(pose)
 
+        self.get_logger().info(
+            f'path geometry: raw_nodes={len(path_nodes)}, '
+            f'line_of_sight_nodes={len(simplified_nodes)}, '
+            f'output_poses={len(path.poses)}'
+        )
         return path
+
+    def simplify_path_nodes(self, path_nodes, occupancy_grid):
+        if len(path_nodes) <= 2:
+            return path_nodes
+
+        simplified = [path_nodes[0]]
+        anchor_idx = 0
+        final_idx = len(path_nodes) - 1
+
+        while anchor_idx < final_idx:
+            next_idx = final_idx
+            while next_idx > anchor_idx + 1:
+                if self.grid_line_is_traversable(
+                    occupancy_grid,
+                    path_nodes[anchor_idx],
+                    path_nodes[next_idx],
+                ) and self.line_preserves_unknown_cost(
+                    occupancy_grid,
+                    path_nodes,
+                    anchor_idx,
+                    next_idx,
+                ):
+                    break
+                next_idx -= 1
+            simplified.append(path_nodes[next_idx])
+            anchor_idx = next_idx
+
+        return simplified
+
+    def line_preserves_unknown_cost(
+        self,
+        occupancy_grid,
+        path_nodes,
+        start_idx,
+        end_idx,
+    ):
+        width = occupancy_grid.info.width
+        start = path_nodes[start_idx]
+        end = path_nodes[end_idx]
+        direct_cells = self.grid_line_cells(
+            start % width,
+            start // width,
+            end % width,
+            end // width,
+        )
+        direct_unknown = sum(
+            occupancy_grid.data[x + y * width] == -1
+            for x, y in direct_cells
+        )
+        original_unknown = sum(
+            occupancy_grid.data[node] == -1
+            for node in path_nodes[start_idx:end_idx + 1]
+        )
+        return direct_unknown <= original_unknown
+
+    def interpolate_path(self, world_points):
+        if not world_points:
+            return []
+
+        output = [world_points[0]]
+        for start, end in zip(world_points, world_points[1:]):
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            distance = math.hypot(dx, dy)
+            steps = max(1, math.ceil(distance / self.path_spacing))
+            for step in range(1, steps + 1):
+                fraction = step / steps
+                output.append((
+                    start[0] + fraction * dx,
+                    start[1] + fraction * dy,
+                ))
+        return output
+
+    def grid_line_is_traversable(self, occupancy_grid, start, end):
+        width = occupancy_grid.info.width
+        start_x, start_y = start % width, start // width
+        end_x, end_y = end % width, end // width
+
+        previous = None
+        for x, y in self.grid_line_cells(start_x, start_y, end_x, end_y):
+            if not self.in_bounds(
+                x,
+                y,
+                occupancy_grid.info.width,
+                occupancy_grid.info.height,
+            ):
+                return False
+            index = x + y * width
+            if not self.is_traversable(occupancy_grid.data[index]):
+                return False
+            if (
+                previous is not None
+                and x != previous[0]
+                and y != previous[1]
+            ):
+                horizontal = x + previous[1] * width
+                vertical = previous[0] + y * width
+                if (
+                    not self.is_traversable(
+                        occupancy_grid.data[horizontal]
+                    )
+                    or not self.is_traversable(
+                        occupancy_grid.data[vertical]
+                    )
+                ):
+                    return False
+            previous = (x, y)
+        return True
+
+    def grid_line_cells(self, start_x, start_y, end_x, end_y):
+        x = start_x
+        y = start_y
+        dx = abs(end_x - start_x)
+        dy = abs(end_y - start_y)
+        step_x = 1 if start_x < end_x else -1
+        step_y = 1 if start_y < end_y else -1
+        error = dx - dy
+
+        while True:
+            yield x, y
+            if x == end_x and y == end_y:
+                return
+            doubled_error = 2 * error
+            if doubled_error > -dy:
+                error -= dy
+                x += step_x
+            if doubled_error < dx:
+                error += dx
+                y += step_y
+
+    def remaining_path_is_traversable(self, occupancy_grid, path):
+        if not path.poses or self.start_pose is None:
+            return False
+
+        map_pose = self.pose_in_frame(
+            self.start_pose,
+            occupancy_grid.header.frame_id,
+        )
+        if map_pose is None:
+            return True
+
+        robot_x = map_pose.pose.position.x
+        robot_y = map_pose.pose.position.y
+        nearest_idx = min(
+            range(len(path.poses)),
+            key=lambda idx: math.hypot(
+                path.poses[idx].pose.position.x - robot_x,
+                path.poses[idx].pose.position.y - robot_y,
+            ),
+        )
+
+        remaining = path.poses[nearest_idx:]
+        for path_pose in remaining:
+            grid_x, grid_y = self.world_to_grid(
+                occupancy_grid,
+                path_pose.pose.position.x,
+                path_pose.pose.position.y,
+            )
+            if not self.in_bounds(
+                grid_x,
+                grid_y,
+                occupancy_grid.info.width,
+                occupancy_grid.info.height,
+            ):
+                return False
+            index = grid_x + grid_y * occupancy_grid.info.width
+            if not self.is_traversable(occupancy_grid.data[index]):
+                return False
+
+        for first, second in zip(remaining, remaining[1:]):
+            first_grid = self.world_to_grid(
+                occupancy_grid,
+                first.pose.position.x,
+                first.pose.position.y,
+            )
+            second_grid = self.world_to_grid(
+                occupancy_grid,
+                second.pose.position.x,
+                second.pose.position.y,
+            )
+            if not (
+                self.in_bounds(
+                    first_grid[0],
+                    first_grid[1],
+                    occupancy_grid.info.width,
+                    occupancy_grid.info.height,
+                )
+                and self.in_bounds(
+                    second_grid[0],
+                    second_grid[1],
+                    occupancy_grid.info.width,
+                    occupancy_grid.info.height,
+                )
+            ):
+                return False
+            first_index = (
+                first_grid[0]
+                + first_grid[1] * occupancy_grid.info.width
+            )
+            second_index = (
+                second_grid[0]
+                + second_grid[1] * occupancy_grid.info.width
+            )
+            if not self.grid_line_is_traversable(
+                occupancy_grid,
+                first_index,
+                second_index,
+            ):
+                return False
+        return True
 
     def pose_to_grid_index(self, occupancy_grid: OccupancyGrid, pose: PoseStamped):
         map_pose = self.pose_in_frame(pose, occupancy_grid.header.frame_id)
@@ -414,6 +688,11 @@ class PathPlanner(Node):
     def is_traversable(self, value):
         return value == 0 or (self.allow_unknown and value == -1)
 
+    def cell_cost_multiplier(self, value):
+        if value == -1:
+            return self.unknown_cost_multiplier
+        return 1.0
+
     def log_path(self, path):
         if not path.poses:
             self.get_logger().warn('path is empty')
@@ -445,40 +724,100 @@ class PathPlanner(Node):
         goal_msg = FollowPath.Goal()
         goal_msg.path = path
         self.path_goal_in_flight = True
+        self.current_path = path
+        self.current_path_generation = self.goal_generation
+        self.replan_requested = False
+        generation = self.goal_generation
         future = self._action_client.send_goal_async(goal_msg)
-        future.add_done_callback(self.follow_path_goal_response)
+        future.add_done_callback(
+            lambda response_future: self.follow_path_goal_response(
+                response_future,
+                generation,
+            )
+        )
 
-    def follow_path_goal_response(self, future):
+    def follow_path_goal_response(self, future, generation):
         try:
             goal_handle = future.result()
         except Exception as exc:
             self.get_logger().warn(f'follow_path goal request failed: {exc}')
-            self.path_goal_in_flight = False
+            self.clear_active_path()
             return
 
         if not goal_handle.accepted:
             self.get_logger().warn('follow_path goal rejected')
-            self.path_goal_in_flight = False
+            self.clear_active_path()
             return
 
+        self.active_goal_handle = goal_handle
         self.get_logger().info('follow_path goal accepted')
         result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.follow_path_result)
+        result_future.add_done_callback(
+            lambda completed_future: self.follow_path_result(
+                completed_future,
+                goal_handle,
+                generation,
+            )
+        )
+        if self.replan_requested or generation != self.goal_generation:
+            self.cancel_active_path()
 
-    def follow_path_result(self, future):
+    def follow_path_result(self, future, goal_handle, generation):
         try:
             result = future.result().result
         except Exception as exc:
             self.get_logger().warn(f'follow_path result failed: {exc}')
-            self.path_goal_in_flight = False
+            if goal_handle is self.active_goal_handle:
+                self.clear_active_path()
             return
 
         self.get_logger().info(
             f'follow_path result: success={result.success}, message="{result.message}"'
         )
-        self.path_goal_in_flight = False
-        if result.success:
+        if goal_handle is not self.active_goal_handle:
+            return
+
+        should_replan = self.replan_requested
+        self.clear_active_path()
+        if result.success and generation == self.goal_generation:
             self.goal = None
+            self.goal_pose = None
+        elif should_replan and self.latest_occupancy_grid is not None:
+            self.planPath(self.latest_occupancy_grid)
+
+    def request_replan(self, reason):
+        if self.replan_requested:
+            return
+        self.replan_requested = True
+        self.get_logger().warn(f'replanning requested: {reason}')
+        if self.active_goal_handle is not None:
+            self.cancel_active_path()
+
+    def cancel_active_path(self):
+        if self.active_goal_handle is None or self.cancel_in_flight:
+            return
+        self.cancel_in_flight = True
+        future = self.active_goal_handle.cancel_goal_async()
+        future.add_done_callback(self.cancel_path_done)
+
+    def cancel_path_done(self, future):
+        self.cancel_in_flight = False
+        try:
+            cancel_response = future.result()
+            accepted = bool(cancel_response.goals_canceling)
+        except Exception as exc:
+            self.get_logger().warn(f'follow_path cancellation failed: {exc}')
+            return
+        if not accepted:
+            self.get_logger().warn('follow_path cancellation was rejected')
+
+    def clear_active_path(self):
+        self.path_goal_in_flight = False
+        self.active_goal_handle = None
+        self.current_path = None
+        self.current_path_generation = None
+        self.cancel_in_flight = False
+        self.replan_requested = False
 
 
 def main(args=None):
@@ -560,4 +899,3 @@ Exploration
 3. Select next point to travel to (could be closest frontier cluster or largest frontier cluster)
 4. Repeat until no frontier clusters are left (room is fully explored)
 '''
-

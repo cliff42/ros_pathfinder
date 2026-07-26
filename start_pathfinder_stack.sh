@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${LOG_DIR:-"$ROOT_DIR/log/stack_$(date +%Y%m%d_%H%M%S)"}"
 
 START_MOTORS=1
+START_IMU=1
 START_LIDAR=0
 LIDAR_PACKAGE=""
 LIDAR_LAUNCH_FILE=""
@@ -16,17 +17,28 @@ usage() {
 Usage: ./start_pathfinder_stack.sh [options]
 
 Starts the ros_pathfinder navigation stack:
-  odom_node, lidar_static_tf, slam_pose_estimator, occupancy, planner,
+  imu_node, odom_node, lidar_static_tf, slam_pose_estimator, occupancy, planner,
   path_follower, controller, motor_controller, and goal_picker.
 
 Options:
   --with-lidar <package> <launch.py>  Start a LiDAR launch file first.
+  --no-imu                           Use encoder angular velocity only.
   --no-motors                        Do not start controller or motor_controller.
   --pick-goal                        Publish one /pick_goal trigger after startup.
   --go-forward-3m                    Publish one /go_forward_3m trigger after startup.
   -h, --help                         Show this help.
 
 Environment:
+  ROBOT_WHEEL_TRACK_M=0.24           Wheel contact center-to-center distance.
+  ROBOT_LENGTH_M=0.25                Robot footprint length.
+  ROBOT_WIDTH_M=0.24                 Robot footprint width.
+  LIDAR_X_M=<measured>                LiDAR X offset from base_link.
+  LIDAR_Y_M=<measured>                LiDAR Y offset from base_link.
+  LIDAR_YAW_RAD=<measured>            LiDAR yaw relative to base_link.
+  ODOM_IMU_YAW_SIGN=1.0              Map IMU Z rate into base_link yaw direction.
+  ODOM_IMU_YAW_BIAS_RAD_S=0.0        Bias subtracted from the mapped IMU rate.
+  ODOM_IMU_YAW_DEADBAND_RAD_S=0.005  Zero small stationary IMU yaw rates.
+  ODOM_IMU_TIMEOUT_S=0.1             Fall back to encoders after this IMU age.
   SLAM_DEBUG_ICP=true                 Compute/log ICP without applying correction.
   SLAM_USE_ICP_CORRECTION=true        Fuse gated ICP poses into the EKF.
   SLAM_ICP_MAX_RMSE=0.065             Override max accepted ICP RMSE.
@@ -36,8 +48,16 @@ Environment:
   SLAM_EKF_PROCESS_STD_YAW=0.071      Moving yaw process std per sqrt(second).
   SLAM_EKF_MAX_NIS=11.34              Innovation gate (99% chi-square, 3 DoF).
   SLAM_ICP_CORRECTION_GAIN=0.18       Deprecated; accepted but ignored.
-  PATH_FOLLOWER_LOOKAHEAD_DIST=0.35   Override path follower lookahead.
+  OCCUPANCY_FOOTPRINT_PADDING=0.02    Padding used only to remove self returns.
+  OCCUPANCY_INFLATION_MARGIN=0.10     Clearance beyond the robot half-diagonal.
+  PLANNER_ALLOW_UNKNOWN=true          Permit paths through unknown map cells.
+  PLANNER_UNKNOWN_COST_MULTIPLIER=3.0 Prefer observed free space over unknown.
+  PLANNER_PATH_SPACING=0.10           Output spacing after line-of-sight cleanup.
+  PATH_FOLLOWER_LOOKAHEAD_DIST=0.30   Override path follower lookahead.
   PATH_FOLLOWER_ANGULAR_GAIN=1.0      Override path follower angular gain.
+  PATH_FOLLOWER_ANGULAR_SMOOTHING=0.35 Low-pass factor for steering commands.
+  CONTROLLER_USE_ODOM_FEEDBACK=true   Apply bounded wheel-speed feedback.
+  CONTROLLER_KP=0.35                  Wheel-speed feedback proportional gain.
 
 Examples:
   ./start_pathfinder_stack.sh
@@ -58,6 +78,10 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             shift 3
+            ;;
+        --no-imu)
+            START_IMU=0
+            shift
             ;;
         --no-motors)
             START_MOTORS=0
@@ -182,8 +206,48 @@ if [[ "$START_LIDAR" -eq 1 ]]; then
     start_process lidar ros2 launch "$LIDAR_PACKAGE" "$LIDAR_LAUNCH_FILE"
 fi
 
-start_process odom_node ros2 run ros_pathfinder odom_node
-start_process lidar_static_tf ros2 run ros_pathfinder lidar_static_tf
+odom_cmd=(ros2 run ros_pathfinder odom_node)
+odom_params=()
+if [[ "$START_IMU" -eq 1 ]]; then
+    start_process imu_node ros2 run ros_pathfinder imu_node
+else
+    odom_params+=(-p "use_imu_angular_velocity:=false")
+    echo "imu disabled: odometry will use encoder angular velocity"
+fi
+if [[ -n "${ROBOT_WHEEL_TRACK_M:-}" ]]; then
+    odom_params+=(-p "wheel_track_m:=$ROBOT_WHEEL_TRACK_M")
+fi
+if [[ -n "${ODOM_IMU_YAW_SIGN:-}" ]]; then
+    odom_params+=(-p "imu_yaw_sign:=$ODOM_IMU_YAW_SIGN")
+fi
+if [[ -n "${ODOM_IMU_YAW_BIAS_RAD_S:-}" ]]; then
+    odom_params+=(-p "imu_yaw_bias_rad_s:=$ODOM_IMU_YAW_BIAS_RAD_S")
+fi
+if [[ -n "${ODOM_IMU_YAW_DEADBAND_RAD_S:-}" ]]; then
+    odom_params+=(-p "imu_yaw_deadband_rad_s:=$ODOM_IMU_YAW_DEADBAND_RAD_S")
+fi
+if [[ -n "${ODOM_IMU_TIMEOUT_S:-}" ]]; then
+    odom_params+=(-p "imu_timeout_s:=$ODOM_IMU_TIMEOUT_S")
+fi
+if [[ "${#odom_params[@]}" -gt 0 ]]; then
+    odom_cmd+=(--ros-args "${odom_params[@]}")
+fi
+start_process odom_node "${odom_cmd[@]}"
+lidar_tf_cmd=(ros2 run ros_pathfinder lidar_static_tf)
+lidar_tf_params=()
+if [[ -n "${LIDAR_X_M:-}" ]]; then
+    lidar_tf_params+=(-p "x:=$LIDAR_X_M")
+fi
+if [[ -n "${LIDAR_Y_M:-}" ]]; then
+    lidar_tf_params+=(-p "y:=$LIDAR_Y_M")
+fi
+if [[ -n "${LIDAR_YAW_RAD:-}" ]]; then
+    lidar_tf_params+=(-p "yaw:=$LIDAR_YAW_RAD")
+fi
+if [[ "${#lidar_tf_params[@]}" -gt 0 ]]; then
+    lidar_tf_cmd+=(--ros-args "${lidar_tf_params[@]}")
+fi
+start_process lidar_static_tf "${lidar_tf_cmd[@]}"
 slam_cmd=(ros2 run ros_pathfinder slam_pose_estimator)
 slam_params=()
 if [[ -n "${SLAM_USE_ICP_CORRECTION:-}" ]]; then
@@ -241,8 +305,47 @@ if [[ "${#slam_params[@]}" -gt 0 ]]; then
     slam_cmd+=(--ros-args "${slam_params[@]}")
 fi
 start_process slam_pose_estimator "${slam_cmd[@]}"
-start_process occupancy ros2 run ros_pathfinder occupancy
-start_process planner ros2 run ros_pathfinder planner
+occupancy_cmd=(ros2 run ros_pathfinder occupancy)
+occupancy_params=()
+if [[ -n "${ROBOT_LENGTH_M:-}" ]]; then
+    occupancy_params+=(-p "robot_length:=$ROBOT_LENGTH_M")
+fi
+if [[ -n "${ROBOT_WIDTH_M:-}" ]]; then
+    occupancy_params+=(-p "robot_width:=$ROBOT_WIDTH_M")
+fi
+if [[ -n "${OCCUPANCY_FOOTPRINT_PADDING:-}" ]]; then
+    occupancy_params+=(
+        -p "footprint_padding:=$OCCUPANCY_FOOTPRINT_PADDING"
+    )
+fi
+if [[ -n "${OCCUPANCY_INFLATION_MARGIN:-}" ]]; then
+    occupancy_params+=(
+        -p "inflation_margin:=$OCCUPANCY_INFLATION_MARGIN"
+    )
+fi
+if [[ "${#occupancy_params[@]}" -gt 0 ]]; then
+    occupancy_cmd+=(--ros-args "${occupancy_params[@]}")
+fi
+start_process occupancy "${occupancy_cmd[@]}"
+
+planner_cmd=(ros2 run ros_pathfinder planner)
+planner_params=()
+if [[ -n "${PLANNER_ALLOW_UNKNOWN:-}" ]]; then
+    planner_params+=(-p "allow_unknown:=$PLANNER_ALLOW_UNKNOWN")
+fi
+if [[ -n "${PLANNER_UNKNOWN_COST_MULTIPLIER:-}" ]]; then
+    planner_params+=(
+        -p "unknown_cost_multiplier:=$PLANNER_UNKNOWN_COST_MULTIPLIER"
+    )
+fi
+if [[ -n "${PLANNER_PATH_SPACING:-}" ]]; then
+    planner_params+=(-p "path_spacing:=$PLANNER_PATH_SPACING")
+fi
+if [[ "${#planner_params[@]}" -gt 0 ]]; then
+    planner_cmd+=(--ros-args "${planner_params[@]}")
+fi
+start_process planner "${planner_cmd[@]}"
+
 path_follower_cmd=(ros2 run ros_pathfinder path_follower)
 path_follower_params=()
 if [[ -n "${PATH_FOLLOWER_LINEAR_VEL:-}" ]]; then
@@ -260,6 +363,16 @@ fi
 if [[ -n "${PATH_FOLLOWER_MAX_ANGULAR_VEL:-}" ]]; then
     path_follower_params+=(-p "max_angular_vel:=$PATH_FOLLOWER_MAX_ANGULAR_VEL")
 fi
+if [[ -n "${PATH_FOLLOWER_ANGULAR_SMOOTHING:-}" ]]; then
+    path_follower_params+=(
+        -p "angular_smoothing:=$PATH_FOLLOWER_ANGULAR_SMOOTHING"
+    )
+fi
+if [[ -n "${PATH_FOLLOWER_ANGULAR_DEADBAND:-}" ]]; then
+    path_follower_params+=(
+        -p "angular_deadband:=$PATH_FOLLOWER_ANGULAR_DEADBAND"
+    )
+fi
 if [[ "${#path_follower_params[@]}" -gt 0 ]]; then
     path_follower_cmd+=(--ros-args "${path_follower_params[@]}")
 fi
@@ -269,6 +382,27 @@ start_process goal_picker ros2 run ros_pathfinder goal_picker
 if [[ "$START_MOTORS" -eq 1 ]]; then
     controller_cmd=(ros2 run ros_pathfinder controller)
     controller_params=()
+    if [[ -n "${ROBOT_WHEEL_TRACK_M:-}" ]]; then
+        controller_params+=(-p "wheel_track_m:=$ROBOT_WHEEL_TRACK_M")
+    fi
+    if [[ -n "${CONTROLLER_USE_ODOM_FEEDBACK:-}" ]]; then
+        controller_params+=(
+            -p "use_odom_feedback:=$CONTROLLER_USE_ODOM_FEEDBACK"
+        )
+    fi
+    if [[ -n "${CONTROLLER_KP:-}" ]]; then
+        controller_params+=(-p "kp:=$CONTROLLER_KP")
+    fi
+    if [[ -n "${CONTROLLER_VELOCITY_FILTER_ALPHA:-}" ]]; then
+        controller_params+=(
+            -p "velocity_filter_alpha:=$CONTROLLER_VELOCITY_FILTER_ALPHA"
+        )
+    fi
+    if [[ -n "${CONTROLLER_MAX_FEEDBACK_CORRECTION:-}" ]]; then
+        controller_params+=(
+            -p "max_feedback_correction:=$CONTROLLER_MAX_FEEDBACK_CORRECTION"
+        )
+    fi
     if [[ -n "${CONTROLLER_LINEAR_SIGN:-}" ]]; then
         controller_params+=(-p "linear_sign:=$CONTROLLER_LINEAR_SIGN")
     fi

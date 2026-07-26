@@ -1,5 +1,5 @@
 import rclpy
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, CancelResponse
 from rclpy.node import Node
 from action_interfaces.action import FollowPath
 import math
@@ -20,7 +20,9 @@ class PathFollower(Node):
             self,
             FollowPath,
             'follow_path',
-            self.execute_callback)
+            self.execute_callback,
+            cancel_callback=self.cancel_callback,
+            callback_group=self.cb_group)
         
         self.create_subscription(Odometry, 'slam_odom', self._odom_cb, 10, callback_group=self.cb_group)
         self.twist_publisher = self.create_publisher(Twist,'cmd_vel',10)
@@ -34,18 +36,33 @@ class PathFollower(Node):
         self.LINEAR_VEL = float(self.declare_parameter('linear_vel', 0.12).value)
         self.GOAL_TOL = float(self.declare_parameter('goal_tol', 0.08).value)
         self.LOOKAHEAD_DIST = float(
-            self.declare_parameter('lookahead_dist', 0.35).value
+            self.declare_parameter('lookahead_dist', 0.30).value
         )
         self.ANGULAR_GAIN = float(self.declare_parameter('angular_gain', 1.0).value)
         self.MAX_ANGULAR_VEL = float(
             self.declare_parameter('max_angular_vel', 0.45).value
         )
+        self.ANGULAR_SMOOTHING = float(
+            self.declare_parameter('angular_smoothing', 0.35).value
+        )
+        self.ANGULAR_DEADBAND = float(
+            self.declare_parameter('angular_deadband', 0.015).value
+        )
+        if self.LOOKAHEAD_DIST <= 0.0:
+            raise ValueError('lookahead_dist must be greater than zero')
+        if not 0.0 <= self.ANGULAR_SMOOTHING < 1.0:
+            raise ValueError('angular_smoothing must be in [0.0, 1.0)')
+        if self.ANGULAR_DEADBAND < 0.0:
+            raise ValueError('angular_deadband cannot be negative')
+        self.last_angular_velocity = 0.0
         self.get_logger().info(
             f'path follower params: linear_vel={self.LINEAR_VEL:.3f}, '
             f'goal_tol={self.GOAL_TOL:.3f}, '
             f'lookahead_dist={self.LOOKAHEAD_DIST:.3f}, '
             f'angular_gain={self.ANGULAR_GAIN:.3f}, '
-            f'max_angular_vel={self.MAX_ANGULAR_VEL:.3f}'
+            f'max_angular_vel={self.MAX_ANGULAR_VEL:.3f}, '
+            f'angular_smoothing={self.ANGULAR_SMOOTHING:.3f}, '
+            f'angular_deadband={self.ANGULAR_DEADBAND:.3f}'
         )
 
     def _odom_cb(self, msg: Odometry):
@@ -58,6 +75,10 @@ class PathFollower(Node):
             self.odom_x = msg.pose.pose.position.x
             self.odom_y = msg.pose.pose.position.y
             self.odom_yaw = yaw
+
+    def cancel_callback(self, _goal_handle):
+        self.get_logger().info('accepting follow_path cancellation')
+        return CancelResponse.ACCEPT
 
     def execute_callback(self,goal_handle):
         path = goal_handle.request.path.poses
@@ -136,16 +157,38 @@ class PathFollower(Node):
                 target_heading = math.atan2(dy, dx)
                 heading_error = self.wrap_angle(target_heading - yaw)
 
-                angular_velocity = self.clamp(
-                    self.ANGULAR_GAIN * heading_error,
-                    -self.MAX_ANGULAR_VEL,
-                    self.MAX_ANGULAR_VEL
-                )
-
                 if abs(heading_error) > math.pi / 3.0:
                     linear_velocity = 0.0
+                    curvature = 0.0
+                    raw_angular_velocity = self.clamp(
+                        self.ANGULAR_GAIN * heading_error,
+                        -self.MAX_ANGULAR_VEL,
+                        self.MAX_ANGULAR_VEL,
+                    )
                 else:
                     linear_velocity = self.LINEAR_VEL * max(0.25, math.cos(heading_error))
+                    effective_lookahead = max(target_distance, 0.05)
+                    curvature = (
+                        2.0 * math.sin(heading_error) / effective_lookahead
+                    )
+                    raw_angular_velocity = self.clamp(
+                        self.ANGULAR_GAIN * linear_velocity * curvature,
+                        -self.MAX_ANGULAR_VEL,
+                        self.MAX_ANGULAR_VEL,
+                    )
+
+                if abs(raw_angular_velocity) < self.ANGULAR_DEADBAND:
+                    raw_angular_velocity = 0.0
+                angular_velocity = (
+                    self.ANGULAR_SMOOTHING * self.last_angular_velocity
+                    + (1.0 - self.ANGULAR_SMOOTHING) * raw_angular_velocity
+                )
+                angular_velocity = self.clamp(
+                    angular_velocity,
+                    -self.MAX_ANGULAR_VEL,
+                    self.MAX_ANGULAR_VEL,
+                )
+                self.last_angular_velocity = angular_velocity
 
                 msg = Twist()
                 msg.linear.x = linear_velocity
@@ -165,7 +208,8 @@ class PathFollower(Node):
                     f'target_heading={target_heading:.3f}, '
                     f'target_dist={target_distance:.3f}, goal_dist={distance_to_goal:.3f}, '
                     f'heading_error={heading_error:.3f}, v={linear_velocity:.3f}, '
-                    f'w={angular_velocity:.3f}'
+                    f'curvature={curvature:.3f}, '
+                    f'raw_w={raw_angular_velocity:.3f}, w={angular_velocity:.3f}'
                 )
 
                 time.sleep(rate_sec)
@@ -190,7 +234,15 @@ class PathFollower(Node):
 
     def select_target_index(self, path, start_idx, x, y):
         last_idx = len(path) - 1
-        idx = min(start_idx, last_idx)
+        start_idx = min(start_idx, last_idx)
+        nearest_idx = min(
+            range(start_idx, len(path)),
+            key=lambda path_idx: math.hypot(
+                path[path_idx].pose.position.x - x,
+                path[path_idx].pose.position.y - y,
+            ),
+        )
+        idx = nearest_idx
 
         while idx < last_idx:
             point = path[idx].pose.position
@@ -201,6 +253,7 @@ class PathFollower(Node):
         return idx
 
     def publish_stop(self):
+        self.last_angular_velocity = 0.0
         self.twist_publisher.publish(Twist())
 
     def wrap_angle(self, angle):

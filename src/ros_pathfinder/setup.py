@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            "imu_node = ros_pathfinder.imu_publisher:main",
+            # Kept for compatibility with the original entry point.
             "talker = ros_pathfinder.imu_publisher:main",
             "listener = ros_pathfinder.test_subscriber:main",
             "motor_controller = ros_pathfinder.motor_controller:main",

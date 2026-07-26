@@ -22,6 +22,7 @@ class OccupancyMapper(Node):
     def __init__(self):
         super().__init__('occupancy_mapper')
         self.map_frame = self.declare_parameter('map_frame', 'slam_odom').value
+        self.base_frame = self.declare_parameter('base_frame', 'base_link').value
 
         map_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -44,6 +45,26 @@ class OccupancyMapper(Node):
         self.resolution = 0.05 # m per cell
         self.width = 400 # num cells
         self.height = 400 # num cells
+        self.robot_length = float(
+            self.declare_parameter('robot_length', 0.25).value
+        )
+        self.robot_width = float(
+            self.declare_parameter('robot_width', 0.24).value
+        )
+        self.footprint_padding = float(
+            self.declare_parameter('footprint_padding', 0.02).value
+        )
+        self.inflation_margin = float(
+            self.declare_parameter('inflation_margin', 0.10).value
+        )
+        if min(
+            self.robot_length,
+            self.robot_width,
+            self.resolution,
+        ) <= 0.0:
+            raise ValueError('robot dimensions and map resolution must be positive')
+        if self.footprint_padding < 0.0 or self.inflation_margin < 0.0:
+            raise ValueError('footprint padding and inflation margin cannot be negative')
 
         self.origin_x = -(self.width * self.resolution) / 2.0
         self.origin_y = -(self.height * self.resolution) / 2.0
@@ -59,10 +80,24 @@ class OccupancyMapper(Node):
 
         self.grid = [-1] * (self.width * self.height)
         self.inflated_grid = [-1] * (self.width * self.height)
-        self.inflation_radius_cells = 5
+        robot_radius = math.hypot(
+            self.robot_length / 2.0,
+            self.robot_width / 2.0,
+        )
+        self.inflation_radius_m = robot_radius + self.inflation_margin
+        self.inflation_radius_cells = math.ceil(
+            self.inflation_radius_m / self.resolution
+        )
 
         self.timer_period = 1.0  # seconds
         self.timer = self.create_timer(self.timer_period, self.timer_callback)
+        self.get_logger().info(
+            f'occupancy geometry: robot={self.robot_length:.3f}x'
+            f'{self.robot_width:.3f} m, footprint_padding='
+            f'{self.footprint_padding:.3f} m, inflation_radius='
+            f'{self.inflation_radius_m:.3f} m '
+            f'({self.inflation_radius_cells} cells)'
+        )
 
     def timer_callback(self):
         self.publish_map()
@@ -75,6 +110,9 @@ class OccupancyMapper(Node):
             return
 
         laser_x, laser_y, laser_yaw = laser_pose
+        laser_to_base = self.laser_transform_to_base(msg.header.frame_id)
+        if laser_to_base is None:
+            return
 
         start_x, start_y = self.world_to_grid(laser_x, laser_y)
         if not self.in_bounds(start_x, start_y):
@@ -92,20 +130,22 @@ class OccupancyMapper(Node):
                 angle += msg.angle_increment
                 continue
 
-            base_x = laser_x - 0.32*math.cos(laser_yaw)
-            base_y = laser_y - 0.32*math.sin(laser_yaw)
+            point_laser_x = math.cos(angle) * point
+            point_laser_y = math.sin(angle) * point
+            if self.point_inside_robot(
+                point_laser_x,
+                point_laser_y,
+                laser_to_base,
+            ):
+                angle += msg.angle_increment
+                continue
 
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
-            if (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
-                angle += msg.angle_increment
-                continue
-            else:
-                # convert to grid coords
-                scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
-
-                self.update_ray(start_x, start_y, scan_x, scan_y)
+            # convert to grid coords
+            scan_x, scan_y = self.world_to_grid(scan_x, scan_y)
+            self.update_ray(start_x, start_y, scan_x, scan_y)
             angle += msg.angle_increment
 
         self.grid = self.log_odds_to_occupancy_grid()
@@ -199,6 +239,38 @@ class OccupancyMapper(Node):
         laser_yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
 
         return laser_x, laser_y, laser_yaw
+
+    def laser_transform_to_base(self, laser_frame):
+        try:
+            return self.tf_buffer.lookup_transform(
+                self.base_frame,
+                laser_frame,
+                rclpy.time.Time()
+            ).transform
+        except (LookupException, ConnectivityException, ExtrapolationException):
+            self.get_logger().warn(
+                f'could not look up {self.base_frame}->{laser_frame} transform'
+            )
+            return None
+
+    def point_inside_robot(self, point_x, point_y, laser_to_base):
+        q = laser_to_base.rotation
+        yaw = self.yaw_from_quaternion(q.x, q.y, q.z, q.w)
+        c = math.cos(yaw)
+        s = math.sin(yaw)
+        base_x = (
+            laser_to_base.translation.x
+            + c * point_x
+            - s * point_y
+        )
+        base_y = (
+            laser_to_base.translation.y
+            + s * point_x
+            + c * point_y
+        )
+        half_length = self.robot_length / 2.0 + self.footprint_padding
+        half_width = self.robot_width / 2.0 + self.footprint_padding
+        return abs(base_x) <= half_length and abs(base_y) <= half_width
 
     def yaw_from_quaternion(self, x, y, z, w):
         return math.atan2(

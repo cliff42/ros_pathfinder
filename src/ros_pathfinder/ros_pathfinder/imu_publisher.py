@@ -1,77 +1,100 @@
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 
-from std_msgs.msg import String, Float64MultiArray
-from smbus2 import SMBus, i2c_msg
+from sensor_msgs.msg import Imu
+
 import board
 import busio
-
 
 from adafruit_bno08x import (
     BNO_REPORT_ACCELEROMETER,
     BNO_REPORT_GYROSCOPE,
-    BNO_REPORT_MAGNETOMETER,
-    BNO_REPORT_ROTATION_VECTOR,
 )
 from adafruit_bno08x.i2c import BNO08X_I2C
-i2c = busio.I2C(board.SCL, board.SDA, frequency=400_000)
-bno = BNO08X_I2C(i2c, address=0x4a)
-bno.enable_feature(BNO_REPORT_ACCELEROMETER)
-bno.enable_feature(BNO_REPORT_GYROSCOPE)
-bno.enable_feature(BNO_REPORT_MAGNETOMETER)
 
 
-
-as5600 = 0x36
-icm29408 = 0x69
-bno085 = 0x4a
-
-bus1 = SMBus(1)   # /dev/i2c-1
-bus2 = SMBus(2)   # /dev/i2c-2
-
-
-
-REG_STATUS = 0x0B
-REG_RAW_ANGLE_H = 0x0C  # read 2 bytes: 0x0C,0x0D
-
-class EncoderPublisher(Node):
+class ImuPublisher(Node):
 
     def __init__(self):
         super().__init__('imu_publisher')
-        self.publisher_ = self.create_publisher(Float64MultiArray, 'encoder_angle', 10)
-        self.publisher2_ = self.create_publisher(Float64MultiArray,'imu_topic',10)
-        self.timer_period = 0.01  # seconds
-        self.timer = self.create_timer(self.timer_period, self.timer_callback)
-        self.i = 0
+
+        self.topic = str(self.declare_parameter(
+            'topic', 'imu/data_raw').value)
+        self.frame_id = str(self.declare_parameter(
+            'frame_id', 'imu_link').value)
+        address = int(self.declare_parameter('i2c_address', 0x4a).value)
+        publish_rate_hz = float(self.declare_parameter(
+            'publish_rate_hz', 100.0).value)
+        if publish_rate_hz <= 0.0:
+            raise ValueError('publish_rate_hz must be greater than zero')
+
+        self.i2c = busio.I2C(
+            board.SCL,
+            board.SDA,
+            frequency=400_000,
+        )
+        self.bno = BNO08X_I2C(self.i2c, address=address)
+        self.bno.enable_feature(BNO_REPORT_ACCELEROMETER)
+        self.bno.enable_feature(BNO_REPORT_GYROSCOPE)
+
+        self.publisher = self.create_publisher(
+            Imu,
+            self.topic,
+            qos_profile_sensor_data,
+        )
+        self.timer = self.create_timer(
+            1.0 / publish_rate_hz,
+            self.timer_callback,
+        )
+        self.last_error_log_ns = None
+
+        self.get_logger().info(
+            f'publishing BNO085 IMU data on {self.topic} at '
+            f'{publish_rate_hz:.1f} Hz in frame {self.frame_id}'
+        )
 
     def timer_callback(self):
-        msg = Float64MultiArray()
-        msg.data = [self.get_raw_angle(bus1), self.get_raw_angle(bus2),self.timer_period]
-        msg2 = Float64MultiArray()
-        msg2.data = [bno.acceleration[0],bno.acceleration[1],bno.acceleration[2],bno.gyro[0],bno.gyro[1],bno.gyro[2],self.timer_period]
-        self.publisher_.publish(msg)
-        self.get_logger().info('Publishing Encoder Data: "%s"' % msg.data)
-        self.publisher2_.publish(msg2)
-        self.get_logger().info('Publishing IMU Data: "%s"' % msg2.data)
+        try:
+            acceleration = self.bno.acceleration
+            gyro = self.bno.gyro
+            if acceleration is None or gyro is None:
+                return
 
-        self.i += 1
+            msg = Imu()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = self.frame_id
 
-    def get_raw_angle(self, bus):
-        data = bus.read_i2c_block_data(as5600, REG_RAW_ANGLE_H, 2)
-        raw = ((data[0] << 8) | data[1]) & 0x0FFF
-        return (raw * 360.0) / 4096.0
-    
-    def get_status(self, bus):
-        status = bus.read_byte_data(as5600, REG_STATUS)
-        return status
+            # The BNO085 driver reports acceleration in m/s^2 and gyro rates
+            # in rad/s. Orientation is intentionally left unavailable.
+            msg.linear_acceleration.x = float(acceleration[0])
+            msg.linear_acceleration.y = float(acceleration[1])
+            msg.linear_acceleration.z = float(acceleration[2])
+            msg.angular_velocity.x = float(gyro[0])
+            msg.angular_velocity.y = float(gyro[1])
+            msg.angular_velocity.z = float(gyro[2])
+
+            # No orientation estimate is being published. Zero covariance
+            # arrays mean the acceleration/rate covariances are unknown.
+            msg.orientation_covariance[0] = -1.0
+
+            self.publisher.publish(msg)
+        except (OSError, RuntimeError, TypeError) as exc:
+            now_ns = self.get_clock().now().nanoseconds
+            if (
+                self.last_error_log_ns is None
+                or now_ns - self.last_error_log_ns >= 1_000_000_000
+            ):
+                self.get_logger().warning(f'failed to read BNO085: {exc}')
+                self.last_error_log_ns = now_ns
 
 
 def main(args=None):
     try:
         with rclpy.init(args=args):
-            encoder_publisher = EncoderPublisher()
-            rclpy.spin(encoder_publisher)
+            imu_publisher = ImuPublisher()
+            rclpy.spin(imu_publisher)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
 
