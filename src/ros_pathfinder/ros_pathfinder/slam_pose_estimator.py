@@ -60,15 +60,70 @@ class LidarOdometry(Node):
         self.max_icp_rotation_error = float(
             self.declare_parameter('max_icp_rotation_error', 0.04).value
         )
-        self.max_icp_translation_correction = float(
-            self.declare_parameter('max_icp_translation_correction', 0.015).value
+        self.initial_std_xy = float(
+            self.declare_parameter('initial_std_xy', 0.10).value
         )
-        self.max_icp_rotation_correction = float(
-            self.declare_parameter('max_icp_rotation_correction', 0.035).value
+        self.initial_std_yaw = float(
+            self.declare_parameter('initial_std_yaw', 0.10).value
         )
-        self.icp_correction_gain = float(
-            self.declare_parameter('icp_correction_gain', 0.18).value
+        self.process_std_xy_per_sqrt_s = float(
+            self.declare_parameter(
+                'process_std_xy_per_sqrt_s',
+                0.10,
+            ).value
         )
+        self.process_std_yaw_per_sqrt_s = float(
+            self.declare_parameter(
+                'process_std_yaw_per_sqrt_s',
+                0.071,
+            ).value
+        )
+        self.stationary_process_std_xy_per_sqrt_s = float(
+            self.declare_parameter(
+                'stationary_process_std_xy_per_sqrt_s',
+                0.001,
+            ).value
+        )
+        self.stationary_process_std_yaw_per_sqrt_s = float(
+            self.declare_parameter(
+                'stationary_process_std_yaw_per_sqrt_s',
+                0.0003,
+            ).value
+        )
+        self.icp_measurement_std_xy = float(
+            self.declare_parameter('icp_measurement_std_xy', 0.05).value
+        )
+        self.icp_measurement_std_yaw = float(
+            self.declare_parameter('icp_measurement_std_yaw', 0.04).value
+        )
+        self.max_ekf_nis = float(
+            self.declare_parameter('max_ekf_nis', 11.34).value
+        )
+
+        # Kept temporarily so existing launch commands do not fail. EKF
+        # correction strength is determined by P and R, not this old gain.
+        self.declare_parameter('icp_correction_gain', 0.18)
+
+        noise_parameters = {
+            'initial_std_xy': self.initial_std_xy,
+            'initial_std_yaw': self.initial_std_yaw,
+            'process_std_xy_per_sqrt_s': self.process_std_xy_per_sqrt_s,
+            'process_std_yaw_per_sqrt_s': self.process_std_yaw_per_sqrt_s,
+            'stationary_process_std_xy_per_sqrt_s':
+                self.stationary_process_std_xy_per_sqrt_s,
+            'stationary_process_std_yaw_per_sqrt_s':
+                self.stationary_process_std_yaw_per_sqrt_s,
+            'icp_measurement_std_xy': self.icp_measurement_std_xy,
+            'icp_measurement_std_yaw': self.icp_measurement_std_yaw,
+        }
+        invalid_noise_parameters = [
+            name for name, value in noise_parameters.items() if value <= 0.0
+        ]
+        if invalid_noise_parameters:
+            names = ', '.join(invalid_noise_parameters)
+            raise ValueError(f'EKF standard deviations must be positive: {names}')
+        if self.max_ekf_nis <= 0.0:
+            raise ValueError('max_ekf_nis must be positive')
 
         self.slam_odom_publisher = self.create_publisher(Odometry, 'slam_odom', 10)
         self.scan_subscriber = None
@@ -81,24 +136,13 @@ class LidarOdometry(Node):
         self.prev_points_tree = None
         self.prev_points = None
 
-        # EKF STATE
-        # mu is [x, y, theta]
+        # Planar EKF state mu = [x, y, yaw].
         self.mu = np.zeros(3)
-
-        # P: 3x3 covariance matrix (uncertainty in mu)
-        self.P = np.eye(3) * 0.01
-
-        # process noise Q (estimated error in wheel odom motion model).
-        # TODO: finalize these values
-        self.Q = np.diag([0.01, 0.01, 0.005])
-
-        # measurement noise R (estimated error in ICP result)
-        # TODO: finalize these values
-        self.R_meas = np.diag([0.05, 0.05, 0.02])
-
-        self.icp_x = 0.0
-        self.icp_y = 0.0
-        self.icp_theta = 0.0
+        self.P = np.diag([
+            self.initial_std_xy ** 2,
+            self.initial_std_xy ** 2,
+            self.initial_std_yaw ** 2,
+        ])
 
         self.last_odom_time = None
         self.latest_odom_pose = None
@@ -117,6 +161,7 @@ class LidarOdometry(Node):
         # Used by scan_callback to reject stationary ICP noise.
         self.last_v = 0.0
         self.last_w = 0.0
+        self.latest_twist_covariance = [0.0] * 36
         self.logged_laser_transform = False
         self.warned_missing_laser_transform = False
 
@@ -124,17 +169,18 @@ class LidarOdometry(Node):
             f'slam pose estimator mode: use_icp_correction={self.use_icp_correction}, '
             f'debug_icp={self.debug_icp}'
         )
+        self.get_logger().info(
+            'icp_correction_gain is deprecated and ignored; EKF correction '
+            'strength is determined by state and ICP covariance'
+        )
 
-    # EKF predict step
     def odom_callback(self, msg: Odometry):
         now = rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
         if self.last_odom_time is None:
             self.last_odom_time = now
             self.store_latest_odom_pose(msg)
             self.mu = self.latest_odom_pose.copy()
-            self.icp_x = float(self.mu[0])
-            self.icp_y = float(self.mu[1])
-            self.icp_theta = float(self.mu[2])
+            self.update_correction_tf_state_from_mu()
             self.publish_correction_tf(msg.header.stamp)
             self.publish_slam_odom(msg.header.stamp)
             return
@@ -142,6 +188,9 @@ class LidarOdometry(Node):
         self.last_odom_time = now
         if dt <= 0.0:
             self.store_latest_odom_pose(msg)
+            if not self.use_icp_correction:
+                self.mu = self.latest_odom_pose.copy()
+            self.update_correction_tf_state_from_mu()
             self.publish_correction_tf(msg.header.stamp)
             self.publish_slam_odom(msg.header.stamp)
             return
@@ -157,48 +206,47 @@ class LidarOdometry(Node):
         if abs(w) < W_DEADBAND:
             w = 0.0
 
-        theta = self.mu[2]
-
         # Store deadbanded velocities for logging and stationary ICP rejection.
         self.last_v = v
         self.last_w = w
 
         self.store_latest_odom_pose(msg)
-
+        self.ekf_predict(v, w, dt)
         if not self.use_icp_correction:
+            # Preserve raw-odom passthrough mode while still tracking its
+            # growing open-loop uncertainty in P.
             self.mu = self.latest_odom_pose.copy()
-            self.corr_x = 0.0
-            self.corr_y = 0.0
-            self.corr_theta = 0.0
-            self.publish_correction_tf(msg.header.stamp)
-            self.publish_slam_odom(msg.header.stamp)
-            return
+        self.update_correction_tf_state_from_mu()
+        self.publish_correction_tf(msg.header.stamp)
+        self.publish_slam_odom(msg.header.stamp)
 
-        # propagate state with differential-drive motion model
-        self.mu[0] += v * math.cos(theta) * dt # robot x pos
-        self.mu[1] += v * math.sin(theta) * dt # robot y pos
-        self.mu[2] += w * dt # robot rotation (theta)
+    def ekf_predict(self, v, w, dt):
+        theta = self.mu[2]
+
+        self.mu[0] += v * math.cos(theta) * dt
+        self.mu[1] += v * math.sin(theta) * dt
+        self.mu[2] += w * dt
         self.mu[2] = math.atan2(math.sin(self.mu[2]), math.cos(self.mu[2]))
 
-        # jacobian of motion model wrt state [x, y, theta]
         F = np.array([
             [1.0, 0.0, -v * math.sin(theta) * dt],
             [0.0, 1.0,  v * math.cos(theta) * dt],
-            [0.0, 0.0,  1.0]
+            [0.0, 0.0, 1.0],
         ])
 
-        # Grow covariance with process (encoder) noise.
-        # self.Q is interpreted as noise per second, so scale by dt.
-        # While stationary, keep process noise very small so the EKF does not
-        # become eager to trust tiny noisy ICP corrections.
         if v == 0.0 and w == 0.0:
-            Q = np.diag([1e-6, 1e-6, 1e-7])
+            std_xy = self.stationary_process_std_xy_per_sqrt_s
+            std_yaw = self.stationary_process_std_yaw_per_sqrt_s
         else:
-            Q = self.Q * dt
+            std_xy = self.process_std_xy_per_sqrt_s
+            std_yaw = self.process_std_yaw_per_sqrt_s
+        Q = np.diag([
+            std_xy ** 2,
+            std_xy ** 2,
+            std_yaw ** 2,
+        ]) * dt
         self.P = F @ self.P @ F.T + Q
-
-        self.publish_correction_tf(msg.header.stamp)
-        self.publish_slam_odom(msg.header.stamp)
+        self.P = 0.5 * (self.P + self.P.T)
 
     def publish_correction_tf(self, stamp):
         corr_tf = TransformStamped()
@@ -336,42 +384,91 @@ class LidarOdometry(Node):
             self.reject_icp(msg.header.stamp, 'missing_previous_mu', dx, dy, dtheta, match_count, rmse)
             return
 
-        measurement_pose = self.compose_pose(previous_mu_pose, np.array([dx, dy, dtheta]))
-        innovation = measurement_pose - self.mu
-        innovation[2] = self.wrap_angle(innovation[2])
-
-        translation_innovation = math.hypot(innovation[0], innovation[1])
-        if translation_innovation > self.max_icp_translation_correction:
-            scale = self.max_icp_translation_correction / translation_innovation
-            innovation[0] *= scale
-            innovation[1] *= scale
-        innovation[2] = self.clamp(
-            innovation[2],
-            -self.max_icp_rotation_correction,
-            self.max_icp_rotation_correction,
+        measurement_pose = self.compose_pose(
+            previous_mu_pose,
+            np.array([dx, dy, dtheta]),
+        )
+        measurement_covariance = self.measurement_covariance_from_icp()
+        accepted, innovation, kalman_gain, nis = self.ekf_update(
+            measurement_pose,
+            measurement_covariance,
         )
 
-        self.mu = self.mu + self.icp_correction_gain * innovation
-        self.mu[2] = self.wrap_angle(self.mu[2])
+        if not accepted:
+            self.get_logger().info(
+                f"ICP_REJECT reason=ekf_nis nis={nis:.3f}, "
+                f"max_nis={self.max_ekf_nis:.3f}, "
+                f"innovation=({innovation[0]:.5f}, {innovation[1]:.5f}, "
+                f"{innovation[2]:.5f})"
+            )
+            self.publish_slam_odom(msg.header.stamp)
+            return
+
         self.get_logger().info(
-            f"ICP_APPLY innovation=({innovation[0]:.5f}, {innovation[1]:.5f}, "
-            f"{innovation[2]:.5f}), gain={self.icp_correction_gain:.3f}, "
+            f"ICP_EKF_APPLY innovation=({innovation[0]:.5f}, "
+            f"{innovation[1]:.5f}, {innovation[2]:.5f}), nis={nis:.3f}, "
+            f"K_diag=({kalman_gain[0, 0]:.3f}, "
+            f"{kalman_gain[1, 1]:.3f}, {kalman_gain[2, 2]:.3f}), "
             f"mu=({self.mu[0]:.3f}, {self.mu[1]:.3f}, {self.mu[2]:.3f})"
         )
 
-        x, y, theta = self.mu[0], self.mu[1], self.mu[2]
+        self.update_correction_tf_state_from_mu()
+        self.prev_scan_mu_pose = self.mu.copy()
+        self.publish_correction_tf(msg.header.stamp)
+        self.publish_slam_odom(msg.header.stamp)
 
-        # Recompute and store the slam_odom->raw_odom correction so odom_callback
-        # can re-publish it at 50 Hz to keep the TF buffer fresh.
-        theta_corr = math.atan2(math.sin(theta - self.odom_theta),
-                                math.cos(theta - self.odom_theta))
-        c, s = math.cos(theta_corr), math.sin(theta_corr)
+    def ekf_update(self, measurement_pose, measurement_covariance):
+        H = np.eye(3)
+        innovation = measurement_pose - H @ self.mu
+        innovation[2] = self.wrap_angle(innovation[2])
+        innovation_covariance = H @ self.P @ H.T + measurement_covariance
+
+        try:
+            solved_innovation = np.linalg.solve(
+                innovation_covariance,
+                innovation,
+            )
+            kalman_gain = np.linalg.solve(
+                innovation_covariance.T,
+                (self.P @ H.T).T,
+            ).T
+        except np.linalg.LinAlgError:
+            return False, innovation, np.zeros((3, 3)), float('inf')
+
+        nis = float(innovation.T @ solved_innovation)
+        if not math.isfinite(nis) or nis > self.max_ekf_nis:
+            return False, innovation, kalman_gain, nis
+
+        self.mu = self.mu + kalman_gain @ innovation
+        self.mu[2] = self.wrap_angle(self.mu[2])
+
+        identity = np.eye(3)
+        residual_factor = identity - kalman_gain @ H
+        self.P = (
+            residual_factor @ self.P @ residual_factor.T
+            + kalman_gain @ measurement_covariance @ kalman_gain.T
+        )
+        self.P = 0.5 * (self.P + self.P.T)
+        return True, innovation, kalman_gain, nis
+
+    def measurement_covariance_from_icp(self):
+        return np.diag([
+            self.icp_measurement_std_xy ** 2,
+            self.icp_measurement_std_xy ** 2,
+            self.icp_measurement_std_yaw ** 2,
+        ])
+
+    def update_correction_tf_state_from_mu(self):
+        if self.latest_odom_pose is None:
+            return
+
+        x, y, theta = self.mu
+        theta_corr = self.wrap_angle(theta - self.odom_theta)
+        c = math.cos(theta_corr)
+        s = math.sin(theta_corr)
         self.corr_x = x - (c * self.odom_x - s * self.odom_y)
         self.corr_y = y - (s * self.odom_x + c * self.odom_y)
         self.corr_theta = theta_corr
-
-        self.prev_scan_mu_pose = self.mu.copy()
-        self.publish_slam_odom(msg.header.stamp)
 
     def run_icp(self, points, odom_delta):
         MAX_ITER = 10
@@ -443,12 +540,28 @@ class LidarOdometry(Node):
         odom.pose.pose.orientation.y = 0.0
         odom.pose.pose.orientation.z = math.sin(self.mu[2] / 2.0)
         odom.pose.pose.orientation.w = math.cos(self.mu[2] / 2.0)
+        odom.pose.covariance = self.pose_covariance_3x3_to_6x6(self.P)
 
         odom.twist.twist.linear.x = self.last_v
         odom.twist.twist.linear.y = 0.0
         odom.twist.twist.angular.z = self.last_w
+        odom.twist.covariance = self.latest_twist_covariance.copy()
 
         self.slam_odom_publisher.publish(odom)
+
+    def pose_covariance_3x3_to_6x6(self, covariance):
+        pose_covariance = [0.0] * 36
+        state_indexes = (0, 1, 5)
+        for state_row, pose_row in enumerate(state_indexes):
+            for state_col, pose_col in enumerate(state_indexes):
+                pose_covariance[pose_row * 6 + pose_col] = float(
+                    covariance[state_row, state_col]
+                )
+
+        pose_covariance[2 * 6 + 2] = 1e6
+        pose_covariance[3 * 6 + 3] = 1e6
+        pose_covariance[4 * 6 + 4] = 1e6
+        return pose_covariance
 
     def store_latest_odom_pose(self, msg):
         self.odom_x = msg.pose.pose.position.x
@@ -457,6 +570,7 @@ class LidarOdometry(Node):
         qw = msg.pose.pose.orientation.w
         self.odom_theta = math.atan2(2.0 * qw * qz, 1.0 - 2.0 * qz * qz)
         self.latest_odom_pose = np.array([self.odom_x, self.odom_y, self.odom_theta])
+        self.latest_twist_covariance = list(msg.twist.covariance)
 
     def get_scan_to_scan_odom_delta(self):
         if self.prev_scan_odom_pose is None or self.latest_odom_pose is None:
@@ -580,9 +694,6 @@ class LidarOdometry(Node):
 
     def wrap_angle(self, angle):
         return math.atan2(math.sin(angle), math.cos(angle))
-
-    def clamp(self, value, low, high):
-        return max(low, min(high, value))
 
 
 def main(args=None):

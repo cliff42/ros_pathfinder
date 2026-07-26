@@ -28,9 +28,14 @@ Options:
 
 Environment:
   SLAM_DEBUG_ICP=true                 Compute/log ICP without applying correction.
-  SLAM_USE_ICP_CORRECTION=true        Apply gated ICP correction to slam_odom.
-  SLAM_ICP_CORRECTION_GAIN=0.18       Override ICP correction gain.
+  SLAM_USE_ICP_CORRECTION=true        Fuse gated ICP poses into the EKF.
   SLAM_ICP_MAX_RMSE=0.065             Override max accepted ICP RMSE.
+  SLAM_ICP_MEASUREMENT_STD_XY=0.05    ICP x/y measurement standard deviation.
+  SLAM_ICP_MEASUREMENT_STD_YAW=0.04   ICP yaw measurement standard deviation.
+  SLAM_EKF_PROCESS_STD_XY=0.10        Moving x/y process std per sqrt(second).
+  SLAM_EKF_PROCESS_STD_YAW=0.071      Moving yaw process std per sqrt(second).
+  SLAM_EKF_MAX_NIS=11.34              Innovation gate (99% chi-square, 3 DoF).
+  SLAM_ICP_CORRECTION_GAIN=0.18       Deprecated; accepted but ignored.
   PATH_FOLLOWER_LOOKAHEAD_DIST=0.35   Override path follower lookahead.
   PATH_FOLLOWER_ANGULAR_GAIN=1.0      Override path follower angular gain.
 
@@ -189,6 +194,33 @@ if [[ -n "${SLAM_DEBUG_ICP:-}" ]]; then
 fi
 if [[ -n "${SLAM_ICP_CORRECTION_GAIN:-}" ]]; then
     slam_params+=(-p "icp_correction_gain:=$SLAM_ICP_CORRECTION_GAIN")
+fi
+if [[ -n "${SLAM_EKF_INITIAL_STD_XY:-}" ]]; then
+    slam_params+=(-p "initial_std_xy:=$SLAM_EKF_INITIAL_STD_XY")
+fi
+if [[ -n "${SLAM_EKF_INITIAL_STD_YAW:-}" ]]; then
+    slam_params+=(-p "initial_std_yaw:=$SLAM_EKF_INITIAL_STD_YAW")
+fi
+if [[ -n "${SLAM_EKF_PROCESS_STD_XY:-}" ]]; then
+    slam_params+=(-p "process_std_xy_per_sqrt_s:=$SLAM_EKF_PROCESS_STD_XY")
+fi
+if [[ -n "${SLAM_EKF_PROCESS_STD_YAW:-}" ]]; then
+    slam_params+=(-p "process_std_yaw_per_sqrt_s:=$SLAM_EKF_PROCESS_STD_YAW")
+fi
+if [[ -n "${SLAM_EKF_STATIONARY_PROCESS_STD_XY:-}" ]]; then
+    slam_params+=(-p "stationary_process_std_xy_per_sqrt_s:=$SLAM_EKF_STATIONARY_PROCESS_STD_XY")
+fi
+if [[ -n "${SLAM_EKF_STATIONARY_PROCESS_STD_YAW:-}" ]]; then
+    slam_params+=(-p "stationary_process_std_yaw_per_sqrt_s:=$SLAM_EKF_STATIONARY_PROCESS_STD_YAW")
+fi
+if [[ -n "${SLAM_ICP_MEASUREMENT_STD_XY:-}" ]]; then
+    slam_params+=(-p "icp_measurement_std_xy:=$SLAM_ICP_MEASUREMENT_STD_XY")
+fi
+if [[ -n "${SLAM_ICP_MEASUREMENT_STD_YAW:-}" ]]; then
+    slam_params+=(-p "icp_measurement_std_yaw:=$SLAM_ICP_MEASUREMENT_STD_YAW")
+fi
+if [[ -n "${SLAM_EKF_MAX_NIS:-}" ]]; then
+    slam_params+=(-p "max_ekf_nis:=$SLAM_EKF_MAX_NIS")
 fi
 if [[ -n "${SLAM_ICP_MAX_RMSE:-}" ]]; then
     slam_params+=(-p "max_icp_rmse:=$SLAM_ICP_MAX_RMSE")
