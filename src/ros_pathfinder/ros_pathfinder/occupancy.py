@@ -55,7 +55,7 @@ class OccupancyMapper(Node):
             self.declare_parameter('footprint_padding', 0.02).value
         )
         self.inflation_margin = float(
-            self.declare_parameter('inflation_margin', 0.10).value
+            self.declare_parameter('inflation_margin', 0.20).value
         )
         if min(
             self.robot_length,
@@ -146,7 +146,7 @@ class OccupancyMapper(Node):
             scan_x = math.cos(angle + laser_yaw) * point + laser_x
             scan_y = math.sin(angle + laser_yaw) * point + laser_y
 
-            if (angle < (3*math.pi / 2) and angle > (math.pi / 2)) and (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
+            if (angle > (3*math.pi / 2) or angle < (math.pi / 2)) and (base_x-scan_x)**2 + (base_y-scan_y)**2 < 1**2:
                 angle += msg.angle_increment
                 continue
             else:
