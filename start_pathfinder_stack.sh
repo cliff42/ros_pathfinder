@@ -35,6 +35,8 @@ Environment:
   LIDAR_X_M=<measured>                LiDAR X offset from base_link.
   LIDAR_Y_M=<measured>                LiDAR Y offset from base_link.
   LIDAR_YAW_RAD=<measured>            LiDAR yaw relative to base_link.
+  IMU_I2C_ADDRESS=0                   Auto-detect 0x4a or 0x4b (default).
+  IMU_STARTUP_DELAY_S=1.0             Delay encoder polling while IMU starts.
   ODOM_IMU_YAW_SIGN=1.0              Map IMU Z rate into base_link yaw direction.
   ODOM_IMU_YAW_BIAS_RAD_S=0.0        Bias subtracted from the mapped IMU rate.
   ODOM_IMU_YAW_DEADBAND_RAD_S=0.005  Zero small stationary IMU yaw rates.
@@ -211,7 +213,16 @@ fi
 odom_cmd=(ros2 run ros_pathfinder odom_node)
 odom_params=()
 if [[ "$START_IMU" -eq 1 ]]; then
-    start_process imu_node ros2 run ros_pathfinder imu_node
+    imu_cmd=(ros2 run ros_pathfinder imu_node)
+    imu_params=()
+    if [[ -n "${IMU_I2C_ADDRESS:-}" ]]; then
+        imu_params+=(-p "i2c_address:=$IMU_I2C_ADDRESS")
+    fi
+    if [[ "${#imu_params[@]}" -gt 0 ]]; then
+        imu_cmd+=(--ros-args "${imu_params[@]}")
+    fi
+    start_process imu_node "${imu_cmd[@]}"
+    sleep "${IMU_STARTUP_DELAY_S:-1.0}"
 else
     odom_params+=(-p "use_imu_angular_velocity:=false")
     echo "imu disabled: odometry will use encoder angular velocity"
