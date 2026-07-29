@@ -6,7 +6,7 @@ from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 import math
 import threading
 
@@ -19,7 +19,7 @@ class MotorControlServer(Node):
     MIN_MOTOR_CMD = 0.08        # overcome motor static friction/stiction
     MIN_WHEEL_VEL = 0.01        # m/s; ignore tiny wheel requests
     MAX_CMD_STEP  = 0.01        # duty-cycle change per control tick
-    DEFAULT_KP    = 0.35        # motor command per m/s of wheel-speed error
+    DEFAULT_KP    = 0.60        # motor command per m/s of wheel-speed error
     LOG_PERIOD    = 1.0         # seconds
     MOTOR_CMD_EPSILON = 0.002
 
@@ -39,7 +39,10 @@ class MotorControlServer(Node):
             self.declare_parameter('velocity_filter_alpha', 0.20).value
         )
         self.max_feedback_correction = float(
-            self.declare_parameter('max_feedback_correction', 0.05).value
+            self.declare_parameter('max_feedback_correction', 0.07).value
+        )
+        self.wheel_velocity_timeout_s = float(
+            self.declare_parameter('wheel_velocity_timeout_s', 0.20).value
         )
         if self.kp < 0.0:
             raise ValueError('kp cannot be negative')
@@ -47,6 +50,8 @@ class MotorControlServer(Node):
             raise ValueError('velocity_filter_alpha must be in (0.0, 1.0]')
         if self.max_feedback_correction < 0.0:
             raise ValueError('max_feedback_correction cannot be negative')
+        if self.wheel_velocity_timeout_s <= 0.0:
+            raise ValueError('wheel_velocity_timeout_s must be positive')
         self.wheel_track_m = float(
             self.declare_parameter(
                 'wheel_track_m',
@@ -64,6 +69,13 @@ class MotorControlServer(Node):
 
         self.create_subscription(Odometry, 'raw_odom', self._odom_cb, 10,
                                  callback_group=self.cb_group)
+        self.create_subscription(
+            Float64MultiArray,
+            'wheel_velocities',
+            self._wheel_velocity_cb,
+            10,
+            callback_group=self.cb_group,
+        )
 
         self._cmd_vel = None
         self._last_cmd_time = None
@@ -75,6 +87,8 @@ class MotorControlServer(Node):
         self._vel_l = 0.0
         self._vel_r = 0.0
         self._have_velocity_measurement = False
+        self._last_direct_wheel_time = None
+        self._wheel_velocity_source = None
         self._last_cmd_l = 0.0
         self._last_cmd_r = 0.0
         self._last_published_l = None
@@ -87,6 +101,7 @@ class MotorControlServer(Node):
             f'kp={self.kp}, velocity_filter_alpha='
             f'{self.velocity_filter_alpha}, '
             f'max_feedback_correction={self.max_feedback_correction}, '
+            f'wheel_velocity_timeout_s={self.wheel_velocity_timeout_s}, '
             f'linear_sign={self.linear_sign}, angular_sign={self.angular_sign}, '
             f'left_motor_sign={self.left_motor_sign}, '
             f'right_motor_sign={self.right_motor_sign}, '
@@ -102,10 +117,47 @@ class MotorControlServer(Node):
         self._last_cmd_time = self.get_clock().now()
 
     def _odom_cb(self, msg: Odometry):
+        if self.direct_wheel_feedback_is_fresh():
+            return
         v = msg.twist.twist.linear.x
         w = msg.twist.twist.angular.z
         measured_l = v - w * self.wheel_track_m / 2.0
         measured_r = v + w * self.wheel_track_m / 2.0
+        self.update_wheel_velocities(
+            measured_l,
+            measured_r,
+            'odom_fallback',
+        )
+
+    def _wheel_velocity_cb(self, msg: Float64MultiArray):
+        if len(msg.data) < 2:
+            self.get_logger().warn(
+                'ignoring wheel_velocities message with fewer than two values'
+            )
+            return
+        measured_l = float(msg.data[0])
+        measured_r = float(msg.data[1])
+        if not math.isfinite(measured_l) or not math.isfinite(measured_r):
+            self.get_logger().warn(
+                'ignoring non-finite wheel velocity measurement'
+            )
+            return
+        self._last_direct_wheel_time = self.get_clock().now()
+        self.update_wheel_velocities(
+            measured_l,
+            measured_r,
+            'direct_encoders',
+        )
+
+    def direct_wheel_feedback_is_fresh(self):
+        if self._last_direct_wheel_time is None:
+            return False
+        age_s = (
+            self.get_clock().now() - self._last_direct_wheel_time
+        ).nanoseconds * 1e-9
+        return 0.0 <= age_s <= self.wheel_velocity_timeout_s
+
+    def update_wheel_velocities(self, measured_l, measured_r, source):
         with self.data_lock:
             if not self._have_velocity_measurement:
                 self._vel_l = measured_l
@@ -115,6 +167,9 @@ class MotorControlServer(Node):
                 alpha = self.velocity_filter_alpha
                 self._vel_l += alpha * (measured_l - self._vel_l)
                 self._vel_r += alpha * (measured_r - self._vel_r)
+        if source != self._wheel_velocity_source:
+            self.get_logger().info(f'wheel velocity source: {source}')
+            self._wheel_velocity_source = source
 
         # self.get_logger().info('left wheel speed: "%s" right wheel speed: "%s"' % (str(self._vel_l),str(self._vel_r)))
 

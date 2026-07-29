@@ -28,10 +28,20 @@ class PathPlanner(Node):
         self.path_spacing = float(
             self.declare_parameter('path_spacing', 0.10).value
         )
+        self.replan_confirmations = int(
+            self.declare_parameter('replan_confirmations', 2).value
+        )
+        self.replan_cooldown_s = float(
+            self.declare_parameter('replan_cooldown_s', 1.5).value
+        )
         if self.unknown_cost_multiplier < 1.0:
             raise ValueError('unknown_cost_multiplier must be at least 1.0')
         if self.path_spacing <= 0.0:
             raise ValueError('path_spacing must be greater than zero')
+        if self.replan_confirmations < 1:
+            raise ValueError('replan_confirmations must be at least one')
+        if self.replan_cooldown_s < 0.0:
+            raise ValueError('replan_cooldown_s cannot be negative')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -84,6 +94,8 @@ class PathPlanner(Node):
         self.replan_requested = False
         self.cancel_in_flight = False
         self.latest_occupancy_grid = None
+        self.blocked_path_observations = 0
+        self.last_path_sent_time = None
 
         self.path_publisher = self.create_publisher(Path,"path",10)
 
@@ -91,7 +103,9 @@ class PathPlanner(Node):
         self.get_logger().info(
             f'planner params: allow_unknown={self.allow_unknown}, '
             f'unknown_cost_multiplier={self.unknown_cost_multiplier:.2f}, '
-            f'path_spacing={self.path_spacing:.3f}'
+            f'path_spacing={self.path_spacing:.3f}, '
+            f'replan_confirmations={self.replan_confirmations}, '
+            f'replan_cooldown_s={self.replan_cooldown_s:.2f}'
         )
 
     
@@ -103,14 +117,27 @@ class PathPlanner(Node):
         if self.start_pose is None or self.goal_pose is None:
             return
         if self.path_goal_in_flight:
-            if (
-                self.current_path is not None
-                and not self.remaining_path_is_traversable(
-                    occupancy_grid,
-                    self.current_path,
-                )
+            if self.current_path is None:
+                return
+            if self.remaining_path_is_traversable(
+                occupancy_grid,
+                self.current_path,
             ):
-                self.request_replan('remaining path is blocked')
+                self.blocked_path_observations = 0
+                return
+
+            self.blocked_path_observations += 1
+            path_age_s = self.current_path_age_s()
+            self.get_logger().warn(
+                f'active path blocked observation '
+                f'{self.blocked_path_observations}/'
+                f'{self.replan_confirmations}, path_age={path_age_s:.2f}s'
+            )
+            if (
+                self.blocked_path_observations >= self.replan_confirmations
+                and path_age_s >= self.replan_cooldown_s
+            ):
+                self.request_replan('remaining path is persistently blocked')
             return
 
         self.map_frame = occupancy_grid.header.frame_id or self.map_frame
@@ -727,6 +754,8 @@ class PathPlanner(Node):
         self.current_path = path
         self.current_path_generation = self.goal_generation
         self.replan_requested = False
+        self.blocked_path_observations = 0
+        self.last_path_sent_time = self.get_clock().now()
         generation = self.goal_generation
         future = self._action_client.send_goal_async(goal_msg)
         future.add_done_callback(
@@ -793,6 +822,13 @@ class PathPlanner(Node):
         if self.active_goal_handle is not None:
             self.cancel_active_path()
 
+    def current_path_age_s(self):
+        if self.last_path_sent_time is None:
+            return float('inf')
+        return (
+            self.get_clock().now() - self.last_path_sent_time
+        ).nanoseconds * 1e-9
+
     def cancel_active_path(self):
         if self.active_goal_handle is None or self.cancel_in_flight:
             return
@@ -818,6 +854,7 @@ class PathPlanner(Node):
         self.current_path_generation = None
         self.cancel_in_flight = False
         self.replan_requested = False
+        self.blocked_path_observations = 0
 
 
 def main(args=None):

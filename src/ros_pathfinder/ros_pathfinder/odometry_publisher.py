@@ -5,6 +5,7 @@ from rclpy.qos import qos_profile_sensor_data
 
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
+from std_msgs.msg import Float64MultiArray
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 
@@ -31,6 +32,11 @@ class OdometryPublisher(Node):
     def __init__(self):
         super().__init__('odometry_publisher')
         self.odom_publisher = self.create_publisher(Odometry, 'raw_odom', 10)
+        self.wheel_velocity_publisher = self.create_publisher(
+            Float64MultiArray,
+            'wheel_velocities',
+            10,
+        )
         self.tf_broadcaster = TransformBroadcaster(self)
         self.timer_period = 0.02
         self.initial_heading = float(
@@ -182,6 +188,9 @@ class OdometryPublisher(Node):
 
         self.vel_l *= LEFT_ENCODER_SIGN
         self.vel_r *= RIGHT_ENCODER_SIGN
+        wheel_velocities = Float64MultiArray()
+        wheel_velocities.data = [self.vel_l, self.vel_r]
+        self.wheel_velocity_publisher.publish(wheel_velocities)
 
         linear_velocity = (self.vel_r + self.vel_l) / 2.0
         encoder_angular_velocity = (

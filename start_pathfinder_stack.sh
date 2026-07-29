@@ -53,11 +53,13 @@ Environment:
   PLANNER_ALLOW_UNKNOWN=true          Permit paths through unknown map cells.
   PLANNER_UNKNOWN_COST_MULTIPLIER=3.0 Prefer observed free space over unknown.
   PLANNER_PATH_SPACING=0.10           Output spacing after line-of-sight cleanup.
+  PLANNER_REPLAN_CONFIRMATIONS=2      Blocked maps required before replanning.
+  PLANNER_REPLAN_COOLDOWN_S=1.5       Minimum active-path age before replanning.
   PATH_FOLLOWER_LOOKAHEAD_DIST=0.30   Override path follower lookahead.
   PATH_FOLLOWER_ANGULAR_GAIN=1.0      Override path follower angular gain.
   PATH_FOLLOWER_ANGULAR_SMOOTHING=0.35 Low-pass factor for steering commands.
   CONTROLLER_USE_ODOM_FEEDBACK=true   Apply bounded wheel-speed feedback.
-  CONTROLLER_KP=0.35                  Wheel-speed feedback proportional gain.
+  CONTROLLER_KP=0.60                  Wheel-speed feedback proportional gain.
 
 Examples:
   ./start_pathfinder_stack.sh
@@ -341,6 +343,16 @@ fi
 if [[ -n "${PLANNER_PATH_SPACING:-}" ]]; then
     planner_params+=(-p "path_spacing:=$PLANNER_PATH_SPACING")
 fi
+if [[ -n "${PLANNER_REPLAN_CONFIRMATIONS:-}" ]]; then
+    planner_params+=(
+        -p "replan_confirmations:=$PLANNER_REPLAN_CONFIRMATIONS"
+    )
+fi
+if [[ -n "${PLANNER_REPLAN_COOLDOWN_S:-}" ]]; then
+    planner_params+=(
+        -p "replan_cooldown_s:=$PLANNER_REPLAN_COOLDOWN_S"
+    )
+fi
 if [[ "${#planner_params[@]}" -gt 0 ]]; then
     planner_cmd+=(--ros-args "${planner_params[@]}")
 fi
@@ -401,6 +413,11 @@ if [[ "$START_MOTORS" -eq 1 ]]; then
     if [[ -n "${CONTROLLER_MAX_FEEDBACK_CORRECTION:-}" ]]; then
         controller_params+=(
             -p "max_feedback_correction:=$CONTROLLER_MAX_FEEDBACK_CORRECTION"
+        )
+    fi
+    if [[ -n "${CONTROLLER_WHEEL_VELOCITY_TIMEOUT_S:-}" ]]; then
+        controller_params+=(
+            -p "wheel_velocity_timeout_s:=$CONTROLLER_WHEEL_VELOCITY_TIMEOUT_S"
         )
     fi
     if [[ -n "${CONTROLLER_LINEAR_SIGN:-}" ]]; then
