@@ -11,6 +11,7 @@ LIDAR_PACKAGE=""
 LIDAR_LAUNCH_FILE=""
 AUTO_PICK_GOAL=0
 AUTO_GO_FORWARD_3M=0
+DEBUG_NAVIGATION_MODE=0
 
 usage() {
     cat <<'EOF'
@@ -21,6 +22,7 @@ Starts the ros_pathfinder navigation stack:
   path_follower, controller, motor_controller, and goal_picker.
 
 Options:
+  --debug-navigation                 Use the conservative ICP debug preset.
   --with-lidar <package> <launch.py>  Start a LiDAR launch file first.
   --no-imu                           Use encoder angular velocity only.
   --no-motors                        Do not start controller or motor_controller.
@@ -57,6 +59,7 @@ Environment:
   PLANNER_PATH_SPACING=0.10           Output spacing after line-of-sight cleanup.
   PLANNER_REPLAN_CONFIRMATIONS=2      Blocked maps required before replanning.
   PLANNER_REPLAN_COOLDOWN_S=1.5       Minimum active-path age before replanning.
+  PATH_FOLLOWER_LINEAR_VEL=0.07       Override path follower forward speed.
   PATH_FOLLOWER_LOOKAHEAD_DIST=0.30   Override path follower lookahead.
   PATH_FOLLOWER_ANGULAR_GAIN=1.0      Override path follower angular gain.
   PATH_FOLLOWER_ANGULAR_SMOOTHING=0.35 Low-pass factor for steering commands.
@@ -65,6 +68,8 @@ Environment:
 
 Examples:
   ./start_pathfinder_stack.sh
+  ./start_pathfinder_stack.sh --debug-navigation
+  ./start_pathfinder_stack.sh --debug-navigation --no-motors
   SLAM_DEBUG_ICP=true ./start_pathfinder_stack.sh --no-motors
   ./start_pathfinder_stack.sh --with-lidar sllidar_ros2 sllidar_a1_launch.py
   ./start_pathfinder_stack.sh --no-motors
@@ -73,6 +78,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --debug-navigation)
+            DEBUG_NAVIGATION_MODE=1
+            shift
+            ;;
         --with-lidar)
             START_LIDAR=1
             LIDAR_PACKAGE="${2:-}"
@@ -110,6 +119,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "$DEBUG_NAVIGATION_MODE" -eq 1 ]]; then
+    ROBOT_WHEEL_TRACK_M=0.24
+    PATH_FOLLOWER_LINEAR_VEL=0.07
+    PATH_FOLLOWER_LOOKAHEAD_DIST=0.15
+    SLAM_USE_ICP_CORRECTION=true
+    SLAM_DEBUG_ICP=true
+fi
 
 source_ros() {
     if command -v ros2 >/dev/null 2>&1; then
@@ -205,6 +222,9 @@ mkdir -p "$LOG_DIR"
 trap cleanup INT TERM EXIT
 
 echo "logs: $LOG_DIR"
+if [[ "$DEBUG_NAVIGATION_MODE" -eq 1 ]]; then
+    echo "debug navigation: wheel_track=0.24, linear_vel=0.07, lookahead=0.15, icp_correction=true, debug_icp=true"
+fi
 
 if [[ "$START_LIDAR" -eq 1 ]]; then
     start_process lidar ros2 launch "$LIDAR_PACKAGE" "$LIDAR_LAUNCH_FILE"
