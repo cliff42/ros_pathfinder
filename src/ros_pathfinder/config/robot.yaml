@@ -1,0 +1,18 @@
+# Sample yaml fiel for physical robot properties shared by multiple ROS nodes (TODO: this will be used by new launch scripts at a later point)
+
+# TODO: update all of these values after code cleanup
+odometry_publisher:
+  ros__parameters:
+    wheel_track_m: 0.24
+    initial_heading: 3.141592653589793
+
+controller_node:
+  ros__parameters:
+    wheel_track_m: 0.24
+
+occupancy_mapper:
+  ros__parameters:
+    robot_length: 0.25
+    robot_width: 0.24
+    map_frame: slam_odom
+    base_frame: base_link
