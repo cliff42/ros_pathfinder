@@ -254,7 +254,8 @@ class OdometryPublisher(Node):
             0.0,  0.0, 0.0, 0.0, 1e6, 0.0,
             0.0,  0.0, 0.0, 0.0, 0.0, 0.1
         ]
-
+        
+        self.get_logger().info(f'x: {self.x} y:{self.y}')
         self.odom_publisher.publish(msg)
 
     def get_angular_velocity(self, encoder_angular_velocity):

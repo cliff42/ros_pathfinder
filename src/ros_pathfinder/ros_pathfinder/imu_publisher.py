@@ -12,7 +12,7 @@ import busio
 
 from adafruit_bno08x import (
     BNO_REPORT_ACCELEROMETER,
-    BNO_REPORT_GYROSCOPE,
+    BNO_REPORT_GYROSCOPE,BNO_REPORT_MAGNETOMETER
 )
 from adafruit_bno08x.i2c import BNO08X_I2C
 
@@ -62,6 +62,7 @@ class ImuPublisher(Node):
         )
         self.bno.enable_feature(BNO_REPORT_ACCELEROMETER)
         self.bno.enable_feature(BNO_REPORT_GYROSCOPE)
+        self.bno.enable_feature(BNO_REPORT_MAGNETOMETER)
 
         self.publisher = self.create_publisher(
             Imu,
@@ -127,6 +128,8 @@ class ImuPublisher(Node):
         try:
             acceleration = self.bno.acceleration
             gyro = self.bno.gyro
+            mag = self.bno.magnetic
+            self.get_logger().info(f'mag x: {mag[0]} mag y:{mag[1]} mag z:{mag[2]}')
             if acceleration is None or gyro is None:
                 return
 
