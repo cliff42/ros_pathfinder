@@ -1,7 +1,7 @@
 from abc import ABC
 
 class Motor(ABC):
-    def set_speed(self, speed: float) -> float:
+    def set_effort(self, effort: float) -> float:
         raise NotImplementedError
 
     def close(self) -> None:
@@ -16,10 +16,10 @@ class MotorPair():
         self._left = left
         self._right = right
 
-    def set_speeds(self, left_speed: float, right_speed: float) -> tuple[float, float]:
+    def set_efforts(self, left_effort: float, right_effort: float) -> tuple[float, float]:
         try:
-            set_left_speed = self._left.set_speed(left_speed)
-            set_right_speed = self._right.set_speed(right_speed)
+            set_left_speed = self._left.set_effort(left_effort)
+            set_right_speed = self._right.set_effort(right_effort)
         except Exception:
             self.close()
             raise
@@ -27,8 +27,8 @@ class MotorPair():
         return set_left_speed, set_right_speed
 
     def stop(self) -> None:
-        self._left.set_speed(0.0)
-        self._right.set_speed(0.0)
+        self._left.set_effort(0.0)
+        self._right.set_effort(0.0)
     
     def close(self):
         self._left.close()

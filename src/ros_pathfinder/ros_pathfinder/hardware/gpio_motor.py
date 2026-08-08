@@ -7,16 +7,16 @@ class GpioPhaseEnableMotor:
                  phase_pin: int, 
                  enable_pin: int, 
                  deadband = 0.005,
-                 max_abs_speed = 1.0,
+                 max_abs_effort = 1.0,
                  inverted = False,
     ) -> None:
         if deadband < 0.0:
             raise ValueError("deadband must be > 0")
-        if not 0.0 < max_abs_speed <= 1.0:
-            raise ValueError("max_abs_speed must be between 0 and 1")
+        if not 0.0 < max_abs_effort <= 1.0:
+            raise ValueError("max_abs_effort must be between 0 and 1")
 
         self._deadband = deadband
-        self._max_abs_speed = max_abs_speed
+        self._max_abs_effort = max_abs_effort
         self._inverted = inverted
 
         self._closed = False
@@ -25,26 +25,26 @@ class GpioPhaseEnableMotor:
 
         self._lock = Lock()
 
-    def set_speed(self, speed: float) -> float:
-        speed = max(-self._max_abs_speed, min(self._max_abs_speed, speed))
+    def set_effort(self, effort: float) -> float:
+        effort = max(-self._max_abs_effort, min(self._max_abs_effort, effort))
 
-        if abs(speed) < self._deadband:
-            speed = 0.0
+        if abs(effort) < self._deadband:
+            effort = 0.0
 
         if self._inverted:
-            speed = -speed
+            effort = -effort
 
         with self._lock:
             self._require_open()
 
-            if speed > 0.0:
-                self._motor.forward(speed)
-            elif speed < 0.0:
-                self._motor.backward(abs(speed))
+            if effort > 0.0:
+                self._motor.forward(effort)
+            elif effort < 0.0:
+                self._motor.backward(abs(effort))
             else:
                 self._motor.stop()
         
-        return speed
+        return effort
     
     def close(self) -> None:
         with self._lock:

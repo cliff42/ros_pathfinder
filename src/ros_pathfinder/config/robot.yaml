@@ -6,13 +6,15 @@ odometry_publisher:
     wheel_track_m: 0.24
     initial_heading: 3.141592653589793
 
-controller_node:
-  ros__parameters:
-    wheel_track_m: 0.24
-
 occupancy_mapper:
   ros__parameters:
     robot_length: 0.25
     robot_width: 0.24
     map_frame: slam_odom
     base_frame: base_link
+
+# TODO: real values start here (remove values above once cut over):
+velocity_controller:
+  ros__parameters:
+    wheel_radius_m: 0.1016
+    wheel_separation_m: 0.24

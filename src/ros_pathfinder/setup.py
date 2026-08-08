@@ -49,6 +49,7 @@ setup(
 
             # new nodes TODO - clean up old nodes above
             "motor_driver = ros_pathfinder.nodes.motor_driver:main",
+            "velocity_controller = ros_pathfinder.nodes.velocity_controller:main",
         ],
     },
 )

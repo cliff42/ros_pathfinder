@@ -45,7 +45,7 @@ class MotorDriverNode(Node):
             self.left_phase_pin, 
             self.left_enable_pin,
             self.deadband, 
-            self.max_abs_speed, 
+            self.max_abs_effort, 
             self.left_inverted
         )
 
@@ -53,7 +53,7 @@ class MotorDriverNode(Node):
             self.right_phase_pin, 
             self.right_enable_pin, 
             self.deadband, 
-            self.max_abs_speed, 
+            self.max_abs_effort, 
             self.right_inverted
         )
 
@@ -65,18 +65,18 @@ class MotorDriverNode(Node):
             self._motors.stop()
             return
 
-        if not (math.isfinite(left_speed) and math.isfinite(right_speed)):
-            self.get_logger().warning("speed commands must be finite")
+        left_effort = float(msg.data[0])
+        right_effort = float(msg.data[1])
+
+        if not (math.isfinite(left_effort) and math.isfinite(right_effort)):
+            self.get_logger().warning("effort commands must be finite")
             self._motors.stop()
             return
 
-        left_speed = float(msg.data[0])
-        right_speed = float(msg.data[1])
-
         try:
-            _set_left_speed, _set_right_speed = self._motors.set_speeds(left_speed, right_speed)
+            _set_left_effort, _set_right_effort = self._motors.set_efforts(left_effort, right_effort)
         except Exception as e:
-            self.get_logger().error(f"error setting motor speeds: {e}")
+            self.get_logger().error(f"error setting motor efforts: {e}")
 
 
     def destroy_node(self):
@@ -93,7 +93,7 @@ class MotorDriverNode(Node):
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("deadband", 0.002)
-        self.declare_parameter("max_abs_speed", 0.40)
+        self.declare_parameter("max_abs_effort", 0.40)
 
         # left motor
         self.declare_parameter("left_motor.phase_pin", 20)
@@ -107,7 +107,7 @@ class MotorDriverNode(Node):
 
     def _get_parameters(self) -> None:
         self.deadband = self.get_parameter("deadband").value
-        self.max_abs_speed = self.get_parameter("max_abs_speed").value
+        self.max_abs_effort = self.get_parameter("max_abs_effort").value
 
         #left motor
         self.left_phase_pin = self.get_parameter("left_motor.phase_pin").value
