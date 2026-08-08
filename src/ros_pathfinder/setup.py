@@ -13,6 +13,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/launch', glob("launch/*.launch.py"))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -43,7 +44,11 @@ setup(
             "planner = ros_pathfinder.planning_node:main",
             "test = ros_pathfinder.conversionTest:main",
             "path_follower = ros_pathfinder.path_follower:main",
-            "controller = ros_pathfinder.controller_node:main"
+            "controller = ros_pathfinder.controller_node:main",
+
+
+            # new nodes TODO - clean up old nodes above
+            "motor_driver = ros_pathfinder.nodes.motor_driver:main",
         ],
     },
 )
