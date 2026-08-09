@@ -43,4 +43,11 @@ def generate_launch_description():
             ],
             output="both"
         ),
+        Node(
+            package="ros_pathfinder",
+            executable="wheel_state",
+            name="wheel_state",
+            parameters=[],
+            output="both"   
+        )
     ])

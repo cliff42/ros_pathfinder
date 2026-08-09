@@ -290,6 +290,7 @@ class OdometryPublisher(Node):
         status = bus.read_byte_data(as5600, REG_STATUS)
         return status
 
+    # TODO: this part will be in wheel encoder
     def get_distance(self, angle, prev_angle, distance):
         delta_angle = angle - prev_angle
         if delta_angle > 180:
