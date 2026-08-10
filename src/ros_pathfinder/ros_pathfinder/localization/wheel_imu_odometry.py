@@ -2,6 +2,8 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
+from ros_pathfinder.util.util import wrap_angle
+
 
 @dataclass(frozen=True)
 class OdometryState:
@@ -87,8 +89,8 @@ class WheelIMUOdometry:
             * self._encoder_distance_scale
         )
 
-        yaw_delta = self._wrap_angle(self._yaw_rad - self._yaw_at_previous_encoder_sample)
-        midpoint_yaw = self._wrap_angle(self._yaw_at_previous_encoder_sample + yaw_delta / 2.0)
+        yaw_delta = wrap_angle(self._yaw_rad - self._yaw_at_previous_encoder_sample)
+        midpoint_yaw = wrap_angle(self._yaw_at_previous_encoder_sample + yaw_delta / 2.0)
 
         self._x_m += distance_m * math.cos(midpoint_yaw)
         self._y_m += distance_m * math.sin(midpoint_yaw)
@@ -109,6 +111,3 @@ class WheelIMUOdometry:
             linear_vel_m_s=linear_velocity_m_s,
             angular_vel_rad_s=self._angular_vel_rad_s
         )
-
-    def _wrap_angle(self, angle_rad: float) -> float:
-        return math.atan2(math.sin(angle_rad), math.cos(angle_rad))
