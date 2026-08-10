@@ -7,6 +7,9 @@ from builtin_interfaces.msg import Time
 
 from sensor_msgs.msg import Imu, JointState
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import TransformStamped
+
+from tf2_ros import TransformBroadcaster
 
 from ros_pathfinder.localization.wheel_imu_odometry import WheelIMUOdometry
 
@@ -47,6 +50,8 @@ class LocalOdometry(Node):
             qos_profile_sensor_data
         )
 
+        self.transform_broadcaster = TransformBroadcaster(self)
+
     def imu_callback(self, msg: Imu) -> None:
         self._estimator.add_imu_sample(
             yaw_rate_rad_s=msg.angular_velocity.z, 
@@ -84,6 +89,23 @@ class LocalOdometry(Node):
             odometry_msg.twist.twist.angular.z = odometry_state.angular_vel_rad_s
         
             self.odometry_publisher.publish(odometry_msg)
+
+            # also need to broadcast the odom -> base_link transform
+            transform = TransformStamped()
+            transform.header.stamp = odometry_msg.header.stamp
+            transform.header.frame_id = self.ODOM_FRAME
+            transform.child_frame_id = self.BASE_FRAME
+
+            transform.transform.translation.x = odometry_state.x_m
+            transform.transform.translation.y = odometry_state.y_m
+            transform.transform.translation.z = 0.0
+
+            transform.transform.rotation.x = 0.0
+            transform.transform.rotation.y = 0.0
+            transform.transform.rotation.z = math.sin(half_yaw)
+            transform.transform.rotation.w = math.cos(half_yaw)
+
+            self.transform_broadcaster.sendTransform(transform)
     
 
     def destroy_node(self):
