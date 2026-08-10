@@ -47,7 +47,7 @@ class WheelEncoder:
         if elapsed_ns <= 0:
             raise ValueError("timestamps must increase")
 
-        sensor_delta_rad = sensor_angle_rad - self._previous_sensor_angle_rad
+        sensor_delta_rad = sensor_angle_rad - self._prev_sensor_angle_rad
         if sensor_delta_rad > math.pi:
             sensor_delta_rad -= (math.pi * 2.0)
         elif sensor_delta_rad < -math.pi:
