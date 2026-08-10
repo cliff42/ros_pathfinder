@@ -52,9 +52,7 @@ class WheelIMUOdometry:
             average_rate = (
                 self._previous_yaw_rate_rad_s + yaw_rate_rad_s
             ) / 2.0
-            self._yaw_rad = self._wrap_angle(
-                self._yaw_rad + average_rate * elapsed_s
-            )
+            self._yaw_rad = wrap_angle(self._yaw_rad + average_rate * elapsed_s)
 
         self._angular_vel_rad_s = yaw_rate_rad_s
         self._previous_yaw_rate_rad_s = yaw_rate_rad_s
