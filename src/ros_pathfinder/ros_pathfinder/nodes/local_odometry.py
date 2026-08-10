@@ -67,7 +67,7 @@ class LocalOdometry(Node):
             odometry_msg = Odometry()
             odometry_msg.header.stamp = msg.header.stamp
             odometry_msg.header.frame_id = self.ODOM_FRAME
-            odometry_msg.child_frame_id = self.B
+            odometry_msg.child_frame_id = self.BASE_FRAME
 
             odometry_msg.pose.pose.position.x = odometry_state.x_m
             odometry_msg.pose.pose.position.y = odometry_state.y_m
