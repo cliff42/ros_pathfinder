@@ -1,5 +1,3 @@
-import math
-
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -9,40 +7,33 @@ from rclpy.qos import (
     QoSProfile,
     ReliabilityPolicy,
 )
-
 from sensor_msgs.msg import JointState
 
 from ros_pathfinder.hardware.as5600_encoder import AS5600Encoder
 from ros_pathfinder.hardware.wheel_encoder import WheelEncoder
 
-# encoder values -> JointState
+
 class WheelState(Node):
+    JOINT_STATES_TOPIC = "joint_states"
 
-    JOINT_STATES_TOPIC = "/joint_states"
-
-    # TODO: add these values to configs
-    GEAR_RATIO = 7.0
-    # The left encoder is on /dev/i2c-2 and the right encoder is on /dev/i2c-1.
-    LEFT_SENSOR_BUS = 1
-    RIGHT_SENSOR_BUS = 2
-    TIMER_PERIOD = 0.05 # 20 hz
-
-
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("wheel_state")
         self._closed = False
-        
-        left_sensor = AS5600Encoder(self.LEFT_SENSOR_BUS)
-        right_sensor = AS5600Encoder(self.RIGHT_SENSOR_BUS)
+
+        self._declare_parameters()
+        self._get_parameters()
+
+        left_sensor = AS5600Encoder(self._left_sensor_bus)
+        right_sensor = AS5600Encoder(self._right_sensor_bus)
 
         self._left_encoder = WheelEncoder(
             sensor=left_sensor,
-            gear_ratio=self.GEAR_RATIO,
+            gear_ratio=self._gear_ratio,
             direction=-1
         )
         self._right_encoder = WheelEncoder(
             sensor=right_sensor,
-            gear_ratio=self.GEAR_RATIO,
+            gear_ratio=self._gear_ratio,
             direction=1
         )
 
@@ -58,7 +49,7 @@ class WheelState(Node):
         )
 
         self.timer = self.create_timer(
-            self.TIMER_PERIOD,
+            (1.0 / self._publish_rate_hz),
             self.wheel_state_callback
         )
 
@@ -93,6 +84,18 @@ class WheelState(Node):
 
         return super().destroy_node()
 
+    def _declare_parameters(self) -> None:
+        # the left encoder is on /dev/i2c-2 and the right encoder is on /dev/i2c-1.
+        self.declare_parameter("left_sensor_bus", 2)
+        self.declare_parameter("right_sensor_bus", 1)
+        self.declare_parameter("gear_ratio", 7.0)
+        self.declare_parameter("publish_rate_hz", 20.0)
+
+    def _get_parameters(self) -> None:
+        self._left_sensor_bus = self.get_parameter("left_sensor_bus").value
+        self._right_sensor_bus = self.get_parameter("right_sensor_bus").value
+        self._gear_ratio = self.get_parameter("gear_ratio").value
+        self._publish_rate_hz = self.get_parameter("publish_rate_hz").value
 
 def main(args=None) -> None:
     rclpy.init(args=args)
@@ -108,6 +111,7 @@ def main(args=None) -> None:
             node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

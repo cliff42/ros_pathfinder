@@ -4,7 +4,6 @@ from typing import Optional, Protocol
 
 
 class EncoderSensor(Protocol):
-    # as5600 encoder implements this fn
     def read_angle_rad(self) -> float:
         ...
 
@@ -45,12 +44,14 @@ class WheelEncoder:
 
         elapsed_ns = timestamp_ns - self._prev_timestamp_ns
 
-        sensor_delta_rad = sensor_angle_rad - self._prev_sensor_angle_rad
+        if elapsed_ns <= 0:
+            raise ValueError("timestamps must increase")
 
+        sensor_delta_rad = sensor_angle_rad - self._previous_sensor_angle_rad
         if sensor_delta_rad > math.pi:
-            sensor_delta_rad -= (math.pi * 2)
+            sensor_delta_rad -= (math.pi * 2.0)
         elif sensor_delta_rad < -math.pi:
-            sensor_delta_rad += (math.pi * 2)
+            sensor_delta_rad += (math.pi * 2.0)
 
         wheel_delta_rad = (self._direction * sensor_delta_rad) / self._gear_ratio
 
