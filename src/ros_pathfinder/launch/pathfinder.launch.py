@@ -97,8 +97,8 @@ def generate_launch_description():
         ),
         Node(
             package="ros_pathfinder",
-            executable="scan_localizer",
-            name="scan_localizer",
+            executable="slam_node",
+            name="slam_node",
             parameters=[],
             output="both"
         ),

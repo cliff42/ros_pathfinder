@@ -55,7 +55,7 @@ setup(
             "wheel_state = ros_pathfinder.nodes.wheel_state:main",
             "imu = ros_pathfinder.nodes.imu:main",
             "local_odometry = ros_pathfinder.nodes.local_odometry:main",
-            "scan_localizer = ros_pathfinder.nodes.scan_localizer:main"
+            "slam_node = ros_pathfinder.nodes.slam_node:main"
         ],
     },
 )

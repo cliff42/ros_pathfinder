@@ -7,6 +7,7 @@ from typing import Optional
 import numpy as np
 
 from ros_pathfinder.geometry.pose2d import Pose2d
+from ros_pathfinder.geometry.scan2d import ScanObservation2d
 from ros_pathfinder.localization.icp_scan_matcher import ICPResult, ICPScanMatcher
 from ros_pathfinder.localization.keyframe import Keyframe
 from ros_pathfinder.localization.local_submap import LocalSubmap
@@ -61,10 +62,12 @@ class ScanLocalization:
         self._map_to_submap: Optional[Pose2d] = None
         self._next_keyframe_id = 0
 
-    def update(self, current_points_base: np.ndarray, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
+    def update(self, current_scan: ScanObservation2d, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
+        current_points_base = current_scan.hit_points_base
+
         if self._active_submap is None:
             return self._initialize(
-                current_points_base,
+                current_scan,
                 current_odom_pose,
                 timestamp_ns
             )
@@ -110,7 +113,7 @@ class ScanLocalization:
 
             if self._should_create_keyframe(relative_pose=last_keyframe_to_current, status=status):
                 created_keyframe = self._create_keyframe(
-                    points_base=current_points_base,
+                    scan=current_scan,
                     odom_pose=current_odom_pose,
                     timestamp_ns=timestamp_ns
                 )
@@ -141,7 +144,7 @@ class ScanLocalization:
             completed_submap=completed_submap
         )
 
-    def _initialize(self, current_points_base: np.ndarray, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
+    def _initialize(self, current_scan: ScanObservation2d, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
         # map and odom start off the same
         self._map_to_odom = Pose2d()
         self._map_to_base = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
@@ -152,7 +155,7 @@ class ScanLocalization:
         )
 
         created_keyframe = self._create_keyframe(
-            points_base=current_points_base, 
+            scan=current_scan, 
             odom_pose=current_odom_pose,
             timestamp_ns=timestamp_ns
         )
@@ -218,11 +221,11 @@ class ScanLocalization:
 
         return translation_m >= self._config.keyframe_translation_threshold_m or rot_rad >= self._config.keyframe_rotation_threshold_rad
 
-    def _create_keyframe(self, points_base: np.ndarray, odom_pose: Pose2d, timestamp_ns: int) -> Keyframe:
+    def _create_keyframe(self, scan: ScanObservation2d, odom_pose: Pose2d, timestamp_ns: int) -> Keyframe:
         keyframe = Keyframe(
             id=self._next_keyframe_id,
             timestamp_ns=timestamp_ns,
-            points_base=points_base.copy(),
+            scan=scan,
             odom_pose=Pose2d(x_m=odom_pose.x_m, y_m=odom_pose.y_m, yaw_rad=odom_pose.yaw_rad)
         )
         self._next_keyframe_id += 1
