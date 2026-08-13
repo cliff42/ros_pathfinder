@@ -50,8 +50,6 @@ class ScanLocalization:
         self._icp_scan_matcher = icp_scan_matcher
         self._config = config
 
-        self._prev_odom_pose: Optional[Pose2d] = None
-
         # corrected pose of base_link in map
         self._map_to_base: Optional[Pose2d] = None
 
@@ -61,6 +59,8 @@ class ScanLocalization:
         self._active_submap: Optional[LocalSubmap] = None
         self._map_to_submap: Optional[Pose2d] = None
         self._next_keyframe_id = 0
+
+        self._last_match_odom_pose: Optional[Pose2d] = None
 
     def update(self, current_scan: ScanObservation2d, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
         current_points_base = current_scan.hit_points_base
@@ -73,17 +73,25 @@ class ScanLocalization:
             )
 
         prev_map_to_base = self._map_to_base
-        incremental_odom_delta = self._prev_odom_pose.between(current_odom_pose)
+        odom_since_last_match = self._last_match_odom_pose.between(
+            current_odom_pose
+        )
         icp_result: Optional[ICPResult] = None
         created_keyframe: Optional[Keyframe] = None
         completed_submap: Optional[LocalSubmap] = None
 
-        if self._is_stationary(incremental_odom_delta):
+        if self._is_stationary(odom_since_last_match):
             status = LocalizationStatus.STATIONARY
             map_to_base = self._map_to_odom.compose(current_odom_pose)
         else:
             submap_origin_odom_pose = self._active_submap.get_origin_keyframe().odom_pose
             submap_to_base_guess = submap_origin_odom_pose.between(current_odom_pose)
+
+            self._last_match_odom_pose = Pose2d(
+                x_m=current_odom_pose.x_m, 
+                y_m=current_odom_pose.y_m,
+                yaw_rad=current_odom_pose.yaw_rad
+            )
 
             icp_result = self._icp_scan_matcher.match(
                 current_points_base=current_points_base,
@@ -132,8 +140,6 @@ class ScanLocalization:
 
                     self._map_to_submap = map_to_base
 
-        self._prev_odom_pose = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
-
         return LocalizationUpdate(
             map_to_odom=self._map_to_odom,
             map_to_base=self._map_to_base,
@@ -148,11 +154,6 @@ class ScanLocalization:
         # map and odom start off the same
         self._map_to_odom = Pose2d()
         self._map_to_base = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
-        self._prev_odom_pose = Pose2d(
-            x_m=current_odom_pose.x_m,
-            y_m=current_odom_pose.y_m,
-            yaw_rad=current_odom_pose.yaw_rad
-        )
 
         created_keyframe = self._create_keyframe(
             scan=current_scan, 
@@ -167,6 +168,8 @@ class ScanLocalization:
         )
 
         self._map_to_submap = self._map_to_base
+
+        self._last_match_odom_pose = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
 
         return LocalizationUpdate(
             map_to_odom=self._map_to_odom,
