@@ -98,7 +98,7 @@ def generate_launch_description():
         Node(
             package="ros_pathfinder",
             executable="scan_localizer",
-            name="local_oscan_localizerdometry",
+            name="scan_localizer",
             parameters=[],
             output="both"
         ),

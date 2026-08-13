@@ -54,7 +54,7 @@ setup(
             "ros_pathfinder.nodes.velocity_controller:main",
             "wheel_state = ros_pathfinder.nodes.wheel_state:main",
             "imu = ros_pathfinder.nodes.imu:main",
-            "local_odometry = ros_pathfinder.nodes.local_odometry:main"
+            "local_odometry = ros_pathfinder.nodes.local_odometry:main",
             "scan_localizer = ros_pathfinder.nodes.scan_localizer:main"
         ],
     },

@@ -35,7 +35,7 @@ class ICPScanMatcher:
         self,
         current_points_base: np.ndarray,
         previous_points_base: np.ndarray,
-        odom_initial_guess: Pose2d
+        initial_transform: Pose2d
     ) -> Optional[ICPResult]:
         if (current_points_base.shape[0] < self._min_match_count or previous_points_base.shape[0] < self._min_match_count):
             return None
@@ -43,7 +43,7 @@ class ICPScanMatcher:
         nearest_neighbours = NearestNeighbors(n_neighbors=1)
         nearest_neighbours.fit(previous_points_base)
 
-        estimate = Pose2d(x_m=odom_initial_guess.x_m, y_m=odom_initial_guess.y_m, yaw_rad=odom_initial_guess.yaw_rad)
+        estimate = Pose2d(x_m=initial_transform.x_m, y_m=initial_transform.y_m, yaw_rad=initial_transform.yaw_rad)
 
         converged = False
         iterations = 0

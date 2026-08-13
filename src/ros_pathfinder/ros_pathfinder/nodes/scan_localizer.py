@@ -31,7 +31,6 @@ class ScanLocalizer(Node):
 
         self._transform_buffer = Buffer()
         self._transform_listener = TransformListener(self._transform_buffer, self)
-
         
         # TODO: add config values for these
         icp_scan_matcher = ICPScanMatcher(
@@ -48,12 +47,11 @@ class ScanLocalizer(Node):
             min_inlier_ratio=0.35,
             max_translation_correction_m=0.20,
             max_rotation_correction_rad=0.20,
+            keyframe_translation_threshold_m=0.15,
+            keyframe_rotation_threshold_rad=0.15,
         )
 
-        self._scan_localization = ScanLocalization(icp_scan_matcher, config) 
-
-        # current localization correction
-        self._map_to_odom = Pose2d()
+        self._scan_localization = ScanLocalization(icp_scan_matcher, config)
 
         self.lidar_subscription = self.create_subscription(
             LaserScan,
@@ -91,7 +89,8 @@ class ScanLocalizer(Node):
 
         localization_update = self._scan_localization.update(
             current_points_base=points_in_base,
-            current_odom_pose=odom_pose
+            current_odom_pose=odom_pose,
+            timestamp_ns=self._timestamp_to_ns(msg.header.stamp)
         )
 
         # broadcast the map -> odom transform
@@ -127,6 +126,9 @@ class ScanLocalizer(Node):
         )
 
         return Pose2d(x_m=translation.x, y_m=translation.y, yaw_rad=yaw)
+
+    def _timestamp_to_ns(self, ts: Time) -> int:
+        return(int(ts.sec) * 1000000000 + int(ts.nanosec))
 
 
 def main(args=None) -> None:
