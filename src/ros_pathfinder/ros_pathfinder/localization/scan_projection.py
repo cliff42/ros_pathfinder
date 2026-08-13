@@ -40,14 +40,10 @@ def scan_to_observation(
     # if the ranges are finite we consider it a hit
     hits = (np.isfinite(ranges_array) & (ranges_array >= range_min_m) & (ranges_array < range_max_m))
 
-    # miss or out of range
-    no_hits = np.isposinf(ranges_array) | (np.isfinite(ranges_array) & (ranges_array >= range_max_m))
-
-    usable_mask = hits | no_hits
-    usable_angles = angles[usable_mask]
+    usable_angles = angles[hits]
 
     # rays with ostacles end at measurement
-    endpoint_ranges = np.where(hits[usable_mask], ranges_array[usable_mask], range_max_m)
+    endpoint_ranges = ranges_array[hits]
 
     endpoints_in_laser = np.column_stack((endpoint_ranges * np.cos(usable_angles), endpoint_ranges * np.sin(usable_angles)))
 
@@ -58,5 +54,5 @@ def scan_to_observation(
     return ScanObservation2d(
         sensor_origin_base=sensor_origin_in_base,
         ray_endpoints_base=endpoints_in_base,
-        hit_mask=hits[usable_mask]
+        hit_mask=np.ones(endpoint_ranges.shape, dtype=bool)
     )
