@@ -95,4 +95,11 @@ def generate_launch_description():
             parameters=[robot_config, calibration_config],
             output="both"
         ),
+        Node(
+            package="ros_pathfinder",
+            executable="scan_localizer",
+            name="local_oscan_localizerdometry",
+            parameters=[],
+            output="both"
+        ),
     ])
