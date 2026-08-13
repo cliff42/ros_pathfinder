@@ -102,4 +102,11 @@ def generate_launch_description():
             parameters=[],
             output="both"
         ),
+        Node(
+            package="ros_pathfinder",
+            executable="path_planner",
+            name="path_planner",
+            parameters=[],
+            output="both"
+        ),
     ])
