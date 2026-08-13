@@ -9,6 +9,7 @@ import numpy as np
 from ros_pathfinder.geometry.pose2d import Pose2d
 from ros_pathfinder.localization.icp_scan_matcher import ICPResult, ICPScanMatcher
 from ros_pathfinder.localization.keyframe import Keyframe
+from ros_pathfinder.localization.local_submap import LocalSubmap
 
 class LocalizationStatus(Enum):
     INITIALIZED = "initialized"
@@ -30,6 +31,8 @@ class ScanLocalizationConfig:
     max_rotation_correction_rad: float
     keyframe_translation_threshold_m: float
     keyframe_rotation_threshold_rad: float
+    submap_max_keyframes: int
+    submap_grid_size_m: float
 
 @dataclass
 class LocalizationUpdate:
@@ -39,6 +42,7 @@ class LocalizationUpdate:
     status: LocalizationStatus
     icp_result: Optional[ICPResult]
     created_keyframe: Optional[Keyframe]
+    completed_submap: Optional[LocalSubmap]
 
 class ScanLocalization:
     def __init__(self, icp_scan_matcher: ICPScanMatcher, config: ScanLocalizationConfig) -> None:
@@ -53,13 +57,13 @@ class ScanLocalization:
         # current localization correction
         self._map_to_odom: Optional[Pose2d] = None
 
-        self._active_keyframe: Optional[Keyframe] = None
-        self._active_keyframe_map_pose: Optional[Pose2d] = None
+        self._active_submap: Optional[LocalSubmap] = None
+        self._map_to_submap: Optional[Pose2d] = None
         self._next_keyframe_id = 0
 
     def update(self, current_points_base: np.ndarray, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
-        if self._active_keyframe is None:
-            return self._initialize_keyframe(
+        if self._active_submap is None:
+            return self._initialize(
                 current_points_base,
                 current_odom_pose,
                 timestamp_ns
@@ -68,28 +72,31 @@ class ScanLocalization:
         prev_map_to_base = self._map_to_base
         incremental_odom_delta = self._prev_odom_pose.between(current_odom_pose)
         icp_result: Optional[ICPResult] = None
+        created_keyframe: Optional[Keyframe] = None
+        completed_submap: Optional[LocalSubmap] = None
 
         if self._is_stationary(incremental_odom_delta):
             status = LocalizationStatus.STATIONARY
             map_to_base = self._map_to_odom.compose(current_odom_pose)
         else:
-            keyframe_odom_delta = self._active_keyframe.odom_pose.between(current_odom_pose)
+            submap_origin_odom_pose = self._active_submap.get_origin_keyframe().odom_pose
+            submap_to_base_guess = submap_origin_odom_pose.between(current_odom_pose)
 
             icp_result = self._icp_scan_matcher.match(
                 current_points_base=current_points_base,
-                previous_points_base=self._active_keyframe.points_base,
-                initial_transform=keyframe_odom_delta
+                previous_points_base=self._active_submap.get_points(),
+                initial_transform=submap_to_base_guess
             )
 
             status = self._evaluate_match(
                 result=icp_result,
-                odom_delta=keyframe_odom_delta,
+                odom_delta=submap_to_base_guess,
                 current_point_count=current_points_base.shape[0]
             )
 
             # TODO: eventually instead of just accepting ICP or odom, we want to fuse both with their covariance matricies
             if status is LocalizationStatus.ICP_ACCEPTED:
-                map_to_base = self._active_keyframe_map_pose.compose(icp_result.delta)
+                map_to_base = self._map_to_submap.compose(icp_result.delta)
             else:
                 map_to_base = self._map_to_odom.compose(current_odom_pose)
 
@@ -98,17 +105,31 @@ class ScanLocalization:
         self._map_to_base = map_to_base
         self._map_to_odom = map_to_base.compose(current_odom_pose.inverse())
 
-        created_keyframe = None
+        if status is LocalizationStatus.ICP_ACCEPTED:
+            last_keyframe_to_current = self._active_submap.get_last_keyframe_pose().between(icp_result.delta)
 
-        if icp_result is not None and self._should_create_keyframe(icp_result.delta, status):
-            created_keyframe = self._create_keyframe(
-                current_points_base,
-                current_odom_pose,
-                map_to_base,
-                timestamp_ns
-            )
+            if self._should_create_keyframe(relative_pose=last_keyframe_to_current, status=status):
+                created_keyframe = self._create_keyframe(
+                    points_base=current_points_base,
+                    odom_pose=current_odom_pose,
+                    timestamp_ns=timestamp_ns
+                )
 
-        self._prev_odom_pose = current_odom_pose
+                self._active_submap.add_keyframe(keyframe=created_keyframe, submap_to_base=icp_result.delta)
+
+                if self._active_submap.is_full():
+                    completed_submap = self._active_submap
+
+                    # new submap shares origin with completed submap
+                    self._active_submap = LocalSubmap(
+                        origin_keyframe=created_keyframe,
+                        max_keyframes=self._config.submap_max_keyframes,
+                        grid_size_m=self._config.submap_grid_size_m
+                    )
+
+                    self._map_to_submap = map_to_base
+
+        self._prev_odom_pose = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
 
         return LocalizationUpdate(
             map_to_odom=self._map_to_odom,
@@ -116,15 +137,14 @@ class ScanLocalization:
             chosen_delta=chosen_delta,
             status=status,
             icp_result=icp_result,
-            created_keyframe=created_keyframe
+            created_keyframe=created_keyframe,
+            completed_submap=completed_submap
         )
 
-    def _initialize_keyframe(self, current_points_base: np.ndarray, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
+    def _initialize(self, current_points_base: np.ndarray, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
         # map and odom start off the same
         self._map_to_odom = Pose2d()
-
         self._map_to_base = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
-
         self._prev_odom_pose = Pose2d(
             x_m=current_odom_pose.x_m,
             y_m=current_odom_pose.y_m,
@@ -133,10 +153,17 @@ class ScanLocalization:
 
         created_keyframe = self._create_keyframe(
             points_base=current_points_base, 
-            odom_pose=current_odom_pose, 
-            map_pose=self._map_to_base, 
+            odom_pose=current_odom_pose,
             timestamp_ns=timestamp_ns
         )
+
+        self._active_submap = LocalSubmap(
+            origin_keyframe=created_keyframe,
+            max_keyframes=self._config.submap_max_keyframes,
+            grid_size_m=self._config.submap_grid_size_m
+        )
+
+        self._map_to_submap = self._map_to_base
 
         return LocalizationUpdate(
             map_to_odom=self._map_to_odom,
@@ -144,7 +171,8 @@ class ScanLocalization:
             chosen_delta=Pose2d(),
             status=LocalizationStatus.INITIALIZED,
             icp_result=None,
-            created_keyframe=created_keyframe
+            created_keyframe=created_keyframe,
+            completed_submap=None
         )
 
     def _evaluate_match(self, result: Optional[ICPResult], odom_delta: Pose2d, current_point_count: int) -> LocalizationStatus:
@@ -190,17 +218,12 @@ class ScanLocalization:
 
         return translation_m >= self._config.keyframe_translation_threshold_m or rot_rad >= self._config.keyframe_rotation_threshold_rad
 
-    def _create_keyframe(self, points_base: np.ndarray, odom_pose: Pose2d, map_pose: Pose2d, timestamp_ns: int) -> Keyframe:
+    def _create_keyframe(self, points_base: np.ndarray, odom_pose: Pose2d, timestamp_ns: int) -> Keyframe:
         keyframe = Keyframe(
             id=self._next_keyframe_id,
             timestamp_ns=timestamp_ns,
             points_base=points_base.copy(),
             odom_pose=Pose2d(x_m=odom_pose.x_m, y_m=odom_pose.y_m, yaw_rad=odom_pose.yaw_rad)
         )
-
         self._next_keyframe_id += 1
-
-        self._active_keyframe = keyframe
-        self._active_keyframe_map_pose = map_pose
-
         return keyframe

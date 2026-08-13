@@ -49,6 +49,8 @@ class ScanLocalizer(Node):
             max_rotation_correction_rad=0.20,
             keyframe_translation_threshold_m=0.15,
             keyframe_rotation_threshold_rad=0.15,
+            submap_max_keyframes=10,
+            submap_grid_size_m=0.03
         )
 
         self._scan_localization = ScanLocalization(icp_scan_matcher, config)
