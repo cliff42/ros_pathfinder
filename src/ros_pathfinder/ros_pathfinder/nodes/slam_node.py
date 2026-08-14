@@ -17,6 +17,7 @@ from ros_pathfinder.localization.icp_scan_matcher import ICPScanMatcher
 from ros_pathfinder.localization.scan_localization import ScanLocalization, ScanLocalizationConfig
 from ros_pathfinder.mapping.occupancy_grid import OccupancyGrid2d, OccupancyGridConfig
 from ros_pathfinder.geometry.pose2d import Pose2d
+from ros_pathfinder.geometry.footprint import FootprintBox2d
 
 class SlamNode(Node):
 
@@ -32,6 +33,13 @@ class SlamNode(Node):
 
         self._transform_buffer = Buffer()
         self._transform_listener = TransformListener(self._transform_buffer, self)
+
+        self._filter_footprint = FootprintBox2d(
+            min_x_m=-0.15,
+            max_x_m=0.50,
+            min_y_m=-0.30,
+            max_y_m=0.30,
+        )
         
         # TODO: add config values for these
         icp_scan_matcher = ICPScanMatcher(
@@ -118,7 +126,8 @@ class SlamNode(Node):
             angle_increment_rad=msg.angle_increment,
             range_min_m=msg.range_min,
             range_max_m=msg.range_max,
-            laser_pose_in_base=laser_pose_in_base
+            laser_pose_in_base=laser_pose_in_base,
+            filter_footprint=self._filter_footprint
         )
 
         odom_pose = self._pose_from_transform(odom_to_base)

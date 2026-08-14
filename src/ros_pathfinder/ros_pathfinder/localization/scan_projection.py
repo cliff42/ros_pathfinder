@@ -2,6 +2,7 @@ import numpy as np
 
 from ros_pathfinder.geometry.scan2d import ScanObservation2d
 from ros_pathfinder.geometry.pose2d import Pose2d
+from ros_pathfinder.geometry.footprint import FootprintBox2d
 
 # scan msg to xy points
 def scan_to_points(
@@ -31,7 +32,8 @@ def scan_to_observation(
         angle_increment_rad: float,
         range_min_m: float,
         range_max_m: float,
-        laser_pose_in_base: Pose2d
+        laser_pose_in_base: Pose2d,
+        filter_footprint: FootprintBox2d
 ) -> ScanObservation2d:
     ranges_array = np.asarray(ranges, dtype=float)
 
@@ -49,10 +51,16 @@ def scan_to_observation(
 
     endpoints_in_base = laser_pose_in_base.transform_points(endpoints_in_laser)
 
+    footprint_hits = filter_footprint.contains_points(endpoints_in_base)
+
+    # ignore the points in the footprint (hits on the robot itself)
+    keep = ~footprint_hits
+    endpoints_in_base = [keep]
+
     sensor_origin_in_base = laser_pose_in_base.transform_points(np.zeros((1, 2), dtype=float))[0]
 
     return ScanObservation2d(
         sensor_origin_base=sensor_origin_in_base,
         ray_endpoints_base=endpoints_in_base,
-        hit_mask=np.ones(endpoint_ranges.shape, dtype=bool)
+        hit_mask=np.ones(endpoints_in_base.shape[0], dtype=bool)
     )

@@ -21,7 +21,7 @@ class PathPlanner(Node):
         # TODO: put these in config
         self.publish_rate_hz = 1.0 
         self._costmap_config = CostmapConfig(
-            robot_radius_m=0.60,
+            robot_radius_m=0.20,
             safety_margin_m=0.05,
             occupied_threshold=65,
             allow_unknown=True,
