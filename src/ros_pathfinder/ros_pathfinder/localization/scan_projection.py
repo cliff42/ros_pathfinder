@@ -55,7 +55,7 @@ def scan_to_observation(
 
     # ignore the points in the footprint (hits on the robot itself)
     keep = ~footprint_hits
-    endpoints_in_base[keep]
+    endpoints_in_base = endpoints_in_base[keep]
 
     sensor_origin_in_base = laser_pose_in_base.transform_points(np.zeros((1, 2), dtype=float))[0]
 
