@@ -2,8 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ros_pathfinder.planning.costmap import Costmap2d
-
-GridCell = tuple[int, int]
+from ros_pathfinder.planning.base_planner import GridCell
 
 @dataclass
 class AStarResult:
