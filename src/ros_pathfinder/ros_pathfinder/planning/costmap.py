@@ -17,12 +17,10 @@ class CostmapConfig:
     unknown_cost_multiplier: float = 3.0
 
 class Costmap2d:
-    def __init__(self, values: np.ndarray, resolution_m: float, config: CostmapConfig,x_m: float,y_m: float) -> None:
+    def __init__(self, values: np.ndarray, resolution_m: float, config: CostmapConfig) -> None:
         self._values = values
         self._resolution_m = resolution_m
         self._config = config
-        self.x_m = x_m
-        self.y_m = y_m
 
     @classmethod
     def from_occupancy(
