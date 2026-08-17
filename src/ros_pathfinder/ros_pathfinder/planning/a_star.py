@@ -65,7 +65,7 @@ class AStarPlanner:
             _,current = heapq.heappop(q)
             if current == 0 or current % width == 0:
                 neighbors = [(-width,LATERAL),(-width+1,DIAG),(1,LATERAL),(width,LATERAL),(width+1,DIAG)]
-            elif current % (width-1) == 0:
+            elif (current+1) % width == 0:
                 neighbors = [(-width-1,DIAG),(-width,LATERAL),(-1,LATERAL),(width-1,DIAG),(width,LATERAL)]
             else:
                 neighbors = [(-width-1,DIAG),(-width,LATERAL),(-width+1,DIAG),(-1,LATERAL),(1,LATERAL),(width-1,DIAG),(width,LATERAL),(width+1,DIAG)]
@@ -81,13 +81,16 @@ class AStarPlanner:
                         dist[i] = new_dist
                         totalCost[i] = new_dist + self.heuristic(i,self.goal,width)
                         prev[i] = current
-
-        
-        path_list = deque([self.gridCell(current,width)])
-        while current != self.start:
-            path_list.appendleft(self.gridCell(prev[current],width))
-            current = prev[current]
-        total_cost = totalCost[self.goal]
-        numNodes = len(path_list)
-        result = AStarResult(path_list,total_cost,numNodes)
+        #if path can be found
+        if current == self.goal:
+            path_list = deque([self.gridCell(current,width)])
+            while current != self.start:
+                path_list.appendleft(self.gridCell(prev[current],width))
+                current = prev[current]
+            total_cost = totalCost[self.goal]
+            numNodes = len(path_list)
+            result = AStarResult(path_list,total_cost,numNodes)
+        #if path cannot be found
+        else:
+            result = AStarResult([None],None,None)
         return result
