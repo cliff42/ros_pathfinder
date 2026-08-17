@@ -82,7 +82,7 @@ class AStarPlanner:
                     if new_dist < dist[i]:
                         dist[i] = new_dist
                         if costmap_1d[i] == -1:
-                            totalCost[i] = new_dist + costmap.config.unknown_cost_multiplier*self.heuristic(i,self.goal,width)
+                            totalCost[i] = new_dist + costmap._config.unknown_cost_multiplier*self.heuristic(i,self.goal,width)
                         else:
                             totalCost[i] = new_dist + self.heuristic(i,self.goal,width)
                         prev[i] = current
