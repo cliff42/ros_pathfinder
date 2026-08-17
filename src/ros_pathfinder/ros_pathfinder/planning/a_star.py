@@ -56,13 +56,13 @@ class AStarPlanner:
         q = [(totalCost[self.start],self.start)]
         
         heapq.heapify(q)
-        for i,v in enumerate(costmap.values):
+        for i, v in enumerate(np.reshape(costmap.values, 1)):
             if i != self.start and (v == 0 or v == -1):
                 dist[i] == np.inf
                 heapq.heappush(q,(dist[i],i))
                 cellSet.add(i)
         while q:
-            _,  _ ,current = heapq.heappop(q)
+            _,  _, current = heapq.heappop(q)
             if current == 0 or current % width == 0:
                 neighbors = [(-width,LATERAL),(-width+1,DIAG),(1,LATERAL),(width,LATERAL),(width+1,DIAG)]
             elif (current+1) % width == 0:
