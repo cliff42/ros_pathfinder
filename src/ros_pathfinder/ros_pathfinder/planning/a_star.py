@@ -1,13 +1,13 @@
+import heapq
+import math
+
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Optional
 
-from ros_pathfinder.planning.costmap import Costmap2d
 from ros_pathfinder.planning.base_planner import GridCell
+from ros_pathfinder.planning.costmap import Costmap2d
 
-import math
-import numpy as np
-import heapq
-from collections import deque
 
 @dataclass
 class AStarResult:
@@ -17,16 +17,16 @@ class AStarResult:
 
 
 class AStarPlanner:
-    def heuristic(self,current,goal,width):
-        x1 = current % width
-        x2 = goal % width
-        y1 = int(current/width)
-        y2 = int(goal/width)
-        return math.sqrt((x2-x1)**2 + (y2-y1)**2)
-    def gridCell(self,current,width):
-        x = current % width
-        y = int(current/width)
-        return x, y
+    _NEIGHBORS = (
+        (-1, -1, math.sqrt(2.0)),
+        (0, -1, 1.0),
+        (1, -1, math.sqrt(2.0)),
+        (-1, 0, 1.0),
+        (1, 0, 1.0),
+        (-1, 1, math.sqrt(2.0)),
+        (0, 1, 1.0),
+        (1, 1, math.sqrt(2.0)),
+    )
 
     def plan(
         self,
@@ -34,68 +34,99 @@ class AStarPlanner:
         start: GridCell,
         goal: GridCell,
     ) -> Optional[AStarResult]:
-        costmap_1d = costmap.convert_to_1d()
-        
-        LATERAL = 1
-        DIAG = math.sqrt(2)
+        self._validate_cell(costmap, start, "start")
+        self._validate_cell(costmap, goal, "goal")
 
-        width = costmap.width
-        height = costmap.height
-        num_cells = width*height
+        if not costmap.is_traversable(*start):
+            return None
+        if not costmap.is_traversable(*goal):
+            return None
 
-        self.start = width*start[1] + start[0]
-        self.goal = width*goal[1] + goal[0]
+        open_heap = [(self._heuristic(start, goal), start)]
+        came_from: dict[GridCell, GridCell] = {}
+        distance_from_start: dict[GridCell, float] = {start: 0.0}
+        expanded: set[GridCell] = set()
 
-        cellSet = {self.start}
-                
-        prev = [None]*width*height
-        dist = [np.inf]*width*height
-        totalCost = [np.inf]*width*height
+        while open_heap:
+            _, current = heapq.heappop(open_heap)
+            if current in expanded:
+                continue
 
-        dist[self.start]=0
-        totalCost[self.start] = dist[self.start] + self.heuristic(self.start,self.goal,width)
+            expanded.add(current)
+            if current == goal:
+                return AStarResult(
+                    path=self._reconstruct_path(came_from, start, goal),
+                    total_cost=distance_from_start[goal],
+                    expanded_nodes=len(expanded),
+                )
 
-        q = [(totalCost[self.start],self.start)]
-        
-        heapq.heapify(q)
-        for i, v in enumerate(costmap_1d):
-            if i != self.start and (v == 0 or v == -1):
-                dist[i] == np.inf
-                heapq.heappush(q,(dist[i],i))
-                cellSet.add(i)
-        while q:
-            _, current = heapq.heappop(q)
-            if current == 0 or current % width == 0:
-                neighbors = [(-width,LATERAL),(-width+1,DIAG),(1,LATERAL),(width,LATERAL),(width+1,DIAG)]
-            elif (current+1) % width == 0:
-                neighbors = [(-width-1,DIAG),(-width,LATERAL),(-1,LATERAL),(width-1,DIAG),(width,LATERAL)]
-            else:
-                neighbors = [(-width-1,DIAG),(-width,LATERAL),(-width+1,DIAG),(-1,LATERAL),(1,LATERAL),(width-1,DIAG),(width,LATERAL),(width+1,DIAG)]
-            if current == self.goal:
-                break
-            for n, cost in neighbors:
-                i = current + n
-                if i >= num_cells or i < 0 or i not in cellSet:
+            current_cost = distance_from_start[current]
+            for neighbor, movement_cost in self._neighbors(costmap, current):
+                tentative_cost = (
+                    current_cost
+                    + movement_cost
+                    * costmap.traversal_multiplier(*neighbor)
+                )
+                known_cost = distance_from_start.get(neighbor, math.inf)
+                if tentative_cost >= known_cost:
                     continue
-                else:
-                    new_dist = dist[current] + cost
-                    if new_dist < dist[i]:
-                        dist[i] = new_dist
-                        if costmap_1d[i] == -1:
-                            totalCost[i] = new_dist + costmap._config.unknown_cost_multiplier*self.heuristic(i,self.goal,width)
-                        else:
-                            totalCost[i] = new_dist + self.heuristic(i,self.goal,width)
-                        prev[i] = current
-        #if path can be found
-        if current == self.goal:
-            path_list = deque([self.gridCell(current,width)])
-            while current != self.start:
-                path_list.appendleft(self.gridCell(prev[current],width))
-                current = prev[current]
-            total_cost = totalCost[self.goal]
-            numNodes = len(path_list)
-            result = AStarResult(path_list,total_cost,numNodes)
-        #if path cannot be found
-        else:
-            result = AStarResult([None],None,None)
-        return result
+
+                came_from[neighbor] = current
+                distance_from_start[neighbor] = tentative_cost
+                estimated_total_cost = (
+                    tentative_cost + self._heuristic(neighbor, goal)
+                )
+                heapq.heappush(
+                    open_heap,
+                    (estimated_total_cost, neighbor),
+                )
+
+        return None
+
+    def _neighbors(
+        self,
+        costmap: Costmap2d,
+        current: GridCell,
+    ) -> Iterator[tuple[GridCell, float]]:
+        current_x, current_y = current
+
+        for offset_x, offset_y, movement_cost in self._NEIGHBORS:
+            neighbor = (current_x + offset_x, current_y + offset_y)
+            if not costmap.is_traversable(*neighbor):
+                continue
+
+            if offset_x != 0 and offset_y != 0:
+                horizontal = (current_x + offset_x, current_y)
+                vertical = (current_x, current_y + offset_y)
+                if (
+                    not costmap.is_traversable(*horizontal)
+                    or not costmap.is_traversable(*vertical)
+                ):
+                    continue
+
+            yield neighbor, movement_cost
+
+    @staticmethod
+    def _heuristic(current: GridCell, goal: GridCell) -> float:
+        return math.hypot(goal[0] - current[0], goal[1] - current[1])
+
+    @staticmethod
+    def _reconstruct_path(
+        came_from: dict[GridCell, GridCell],
+        start: GridCell,
+        goal: GridCell,
+    ) -> list[GridCell]:
+        path = [goal]
+        while path[-1] != start:
+            path.append(came_from[path[-1]])
+        path.reverse()
+        return path
+
+    @staticmethod
+    def _validate_cell(
+        costmap: Costmap2d,
+        cell: GridCell,
+        name: str,
+    ) -> None:
+        if not costmap.in_bounds(*cell):
+            raise ValueError(f"{name} cell {cell} is outside the costmap")
