@@ -235,6 +235,7 @@ class PathPlannerNode(Node):
 
         if self._goal.header.frame_id != self._map_frame:
             self.get_logger().warning("goal is not expressed in the map frame")
+            self._finish_failed_plan()
             return
 
         try:
@@ -261,12 +262,12 @@ class PathPlannerNode(Node):
 
         if start is None:
             self.get_logger().warning("robot pose is outside the costmap")
-            self._publish_empty_path()
+            self._finish_failed_plan()
             return
 
         if goal is None:
             self.get_logger().warning("goal is outside the costmap")
-            self._publish_empty_path()
+            self._finish_failed_plan()
             return
 
         result = self._planner.plan(
@@ -277,7 +278,7 @@ class PathPlannerNode(Node):
 
         if result is None or not result.path:
             self.get_logger().warning("no path could be found")
-            self._publish_empty_path()
+            self._finish_failed_plan()
             return
 
         raw_path = list(result.path)
@@ -287,7 +288,7 @@ class PathPlannerNode(Node):
             self.get_logger().error(
                 f"planner returned an invalid path: {error}"
             )
-            self._publish_empty_path()
+            self._finish_failed_plan()
             return
 
         path_msg = self._publish_path(path)
@@ -350,6 +351,11 @@ class PathPlannerNode(Node):
         self._pending_follow_generation = None
         self._follow_stop_requested = True
         self._cancel_active_following()
+
+    def _finish_failed_plan(self) -> None:
+        self._plan_requested = False
+        self._earliest_replan_ns = 0
+        self._publish_empty_path()
 
     def _queue_path_for_following(self, path: Path) -> None:
         self._pending_follow_path = path
@@ -466,14 +472,14 @@ class PathPlannerNode(Node):
         message = result.error_msg or (
             "goal reached" if succeeded else "no error message provided"
         )
-        if succeeded or canceled:
-            log = self.get_logger().info
-        else:
-            log = self.get_logger().warning
-        log(
+        result_summary = (
             f"path follower finished: {message} "
             f"(status={response.status}, error_code={result.error_code})"
         )
+        if succeeded or canceled:
+            self.get_logger().info(result_summary)
+        else:
+            self.get_logger().warning(result_summary)
 
         if (
             self._replan_on_blocked_path
