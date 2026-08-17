@@ -8,6 +8,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import Twist
 from nav2_msgs.action import FollowPath
+from nav_msgs.msg import Odometry
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import (
     MutuallyExclusiveCallbackGroup,
@@ -53,10 +54,12 @@ class _ActiveGoal:
     last_transform_time_ns: int
 
 
+# inspired by https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
 class PathFollowerNode(Node):
     ACTION_NAME = "follow_path"
     CMD_VEL_TOPIC = "cmd_vel"
     SCAN_TOPIC = "scan"
+    ODOM_TOPIC = "odom"
 
     def __init__(self) -> None:
         super().__init__("path_follower")
@@ -73,6 +76,7 @@ class PathFollowerNode(Node):
         self._last_scan_transform_warning_ns = 0
         self._latest_scan_points_base: Optional[np.ndarray] = None
         self._latest_scan_received_time_ns: Optional[int] = None
+        self._latest_linear_velocity_m_s = 0.0
 
         self._tracker = PathTracker(self._tracking_config)
         self._collision_checker = TrajectoryCollisionChecker(
@@ -108,6 +112,12 @@ class PathFollowerNode(Node):
             self._scan_callback,
             qos_profile_sensor_data,
         )
+        self._odom_subscription = self.create_subscription(
+            Odometry,
+            self.ODOM_TOPIC,
+            self._odom_callback,
+            qos_profile_sensor_data,
+        )
 
         self._action_server = ActionServer(
             self,
@@ -129,7 +139,9 @@ class PathFollowerNode(Node):
         self.declare_parameter("control_rate_hz", 20.0)
         self.declare_parameter("transform_timeout_s", 1.0)
         self.declare_parameter("desired_linear_velocity_m_s", 0.12)
-        self.declare_parameter("lookahead_distance_m", 0.30)
+        self.declare_parameter("minimum_lookahead_distance_m", 0.12)
+        self.declare_parameter("lookahead_time_s", 0.50)
+        self.declare_parameter("maximum_lookahead_distance_m", 0.30)
         self.declare_parameter("goal_position_tolerance_m", 0.08)
         self.declare_parameter("goal_yaw_tolerance_rad", 0.12)
         self.declare_parameter("rotate_in_place_threshold_rad", 1.05)
@@ -175,8 +187,14 @@ class PathFollowerNode(Node):
             desired_linear_velocity_m_s=float(
                 self.get_parameter("desired_linear_velocity_m_s").value
             ),
-            lookahead_distance_m=float(
-                self.get_parameter("lookahead_distance_m").value
+            minimum_lookahead_distance_m=float(
+                self.get_parameter("minimum_lookahead_distance_m").value
+            ),
+            lookahead_time_s=float(
+                self.get_parameter("lookahead_time_s").value
+            ),
+            maximum_lookahead_distance_m=float(
+                self.get_parameter("maximum_lookahead_distance_m").value
             ),
             goal_position_tolerance_m=float(
                 self.get_parameter("goal_position_tolerance_m").value
@@ -295,6 +313,7 @@ class PathFollowerNode(Node):
     def _control_callback(self) -> None:
         with self._state_lock:
             active_goal = self._active_goal
+            current_linear_velocity_m_s = self._latest_linear_velocity_m_s
 
         if active_goal is None:
             return
@@ -347,6 +366,7 @@ class PathFollowerNode(Node):
                 robot_pose=robot_pose,
                 path_points=active_goal.path_points,
                 final_yaw_rad=active_goal.final_yaw_rad,
+                current_linear_velocity_m_s=current_linear_velocity_m_s,
                 previous_target_index=active_goal.target_index,
                 previous_angular_velocity_rad_s=(
                     active_goal.previous_angular_velocity_rad_s
@@ -392,6 +412,14 @@ class PathFollowerNode(Node):
             command.linear_velocity_m_s,
             command.angular_velocity_rad_s,
         )
+
+    def _odom_callback(self, msg: Odometry) -> None:
+        linear_velocity_m_s = float(msg.twist.twist.linear.x)
+        if not math.isfinite(linear_velocity_m_s):
+            return
+
+        with self._state_lock:
+            self._latest_linear_velocity_m_s = linear_velocity_m_s
 
     def _finish_goal(
         self,

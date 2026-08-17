@@ -6,10 +6,13 @@ import numpy as np
 from ros_pathfinder.util.util import wrap_angle
 
 
+# inspired by https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
 @dataclass
 class PathTrackingConfig:
     desired_linear_velocity_m_s: float = 0.12
-    lookahead_distance_m: float = 0.30
+    minimum_lookahead_distance_m: float = 0.12
+    lookahead_time_s: float = 0.50
+    maximum_lookahead_distance_m: float = 0.30
     goal_position_tolerance_m: float = 0.08
     goal_yaw_tolerance_rad: float = 0.12
     rotate_in_place_threshold_rad: float = 1.05
@@ -22,8 +25,20 @@ class PathTrackingConfig:
     def __post_init__(self) -> None:
         if self.desired_linear_velocity_m_s <= 0.0:
             raise ValueError("desired_linear_velocity_m_s must be positive")
-        if self.lookahead_distance_m <= 0.0:
-            raise ValueError("lookahead_distance_m must be positive")
+        if self.minimum_lookahead_distance_m <= 0.0:
+            raise ValueError(
+                "minimum_lookahead_distance_m must be positive"
+            )
+        if self.lookahead_time_s < 0.0:
+            raise ValueError("lookahead_time_s must be non-negative")
+        if (
+            self.maximum_lookahead_distance_m
+            < self.minimum_lookahead_distance_m
+        ):
+            raise ValueError(
+                "maximum_lookahead_distance_m must be greater than or "
+                "equal to minimum_lookahead_distance_m"
+            )
         if self.goal_position_tolerance_m < 0.0:
             raise ValueError("goal_position_tolerance_m must be non-negative")
         if self.goal_yaw_tolerance_rad < 0.0:
@@ -60,6 +75,7 @@ class PathTracker:
         robot_pose: tuple[float, float, float],
         path_points: np.ndarray,
         final_yaw_rad: float,
+        current_linear_velocity_m_s: float = 0.0,
         previous_target_index: int = 0,
         previous_angular_velocity_rad_s: float = 0.0,
     ) -> PathTrackingCommand:
@@ -75,6 +91,7 @@ class PathTracker:
             robot_y,
             robot_yaw,
             final_yaw_rad,
+            current_linear_velocity_m_s,
             previous_angular_velocity_rad_s,
         )
         if not all(isfinite(value) for value in values):
@@ -83,6 +100,9 @@ class PathTracker:
         goal_x, goal_y = points[-1]
         distance_to_goal = hypot(goal_x - robot_x, goal_y - robot_y)
         last_index = len(points) - 1
+        lookahead_distance = self._lookahead_distance(
+            current_linear_velocity_m_s
+        )
 
         if distance_to_goal <= self._config.goal_position_tolerance_m:
             yaw_error = wrap_angle(final_yaw_rad - robot_yaw)
@@ -112,6 +132,7 @@ class PathTracker:
             robot_x,
             robot_y,
             previous_target_index,
+            lookahead_distance,
         )
         target_distance = hypot(target_x - robot_x, target_y - robot_y)
         target_heading = atan2(target_y - robot_y, target_x - robot_x)
@@ -127,7 +148,7 @@ class PathTracker:
                 cos(heading_error),
             )
             slowdown_distance = max(
-                self._config.lookahead_distance_m,
+                lookahead_distance,
                 2.0 * self._config.goal_position_tolerance_m,
             )
             goal_scale = max(
@@ -185,6 +206,7 @@ class PathTracker:
         robot_x: float,
         robot_y: float,
         previous_target_index: int,
+        lookahead_distance_m: float,
     ) -> tuple[int, float, float]:
         last_index = len(points) - 1
         if last_index == 0:
@@ -196,6 +218,45 @@ class PathTracker:
         )
         first_segment = max(previous_target_index - 1, 0)
         robot = np.array([robot_x, robot_y], dtype=float)
+
+        first_projection_fraction = self._segment_projection_fraction(
+            robot,
+            points[first_segment],
+            points[first_segment + 1],
+        )
+        for segment_index in range(first_segment, last_index):
+            start = points[segment_index]
+            end = points[segment_index + 1]
+            intersection_fractions = self._circle_segment_intersections(
+                circle_center=robot,
+                circle_radius_m=lookahead_distance_m,
+                segment_start=start,
+                segment_end=end,
+            )
+            minimum_fraction = (
+                first_projection_fraction
+                if segment_index == first_segment
+                else 0.0
+            )
+            forward_intersections = [
+                fraction
+                for fraction in intersection_fractions
+                if fraction >= minimum_fraction - 1e-9
+            ]
+            if not forward_intersections:
+                continue
+
+            fraction = max(forward_intersections)
+            target = start + fraction * (end - start)
+            return (
+                max(previous_target_index, segment_index + 1),
+                float(target[0]),
+                float(target[1]),
+            )
+
+        goal = points[-1]
+        if float(np.linalg.norm(goal - robot)) <= lookahead_distance_m:
+            return last_index, float(goal[0]), float(goal[1])
 
         nearest_segment = first_segment
         nearest_point = points[first_segment].copy()
@@ -221,31 +282,84 @@ class PathTracker:
                 nearest_segment = segment_index
                 nearest_point = projection
 
-        remaining_distance = self._config.lookahead_distance_m
-        current_point = nearest_point
-        segment_index = nearest_segment
+        return (
+            max(previous_target_index, nearest_segment + 1),
+            float(nearest_point[0]),
+            float(nearest_point[1]),
+        )
 
-        while segment_index < last_index:
-            segment_end = points[segment_index + 1]
-            segment = segment_end - current_point
-            segment_length = float(np.linalg.norm(segment))
+    @staticmethod
+    def _segment_projection_fraction(
+        point: np.ndarray,
+        segment_start: np.ndarray,
+        segment_end: np.ndarray,
+    ) -> float:
+        segment = segment_end - segment_start
+        length_squared = float(np.dot(segment, segment))
+        if length_squared <= 1e-12:
+            return 0.0
 
-            if segment_length >= remaining_distance and segment_length > 1e-12:
-                target = (
-                    current_point
-                    + (remaining_distance / segment_length) * segment
-                )
-                return (
-                    max(previous_target_index, segment_index + 1),
-                    float(target[0]),
-                    float(target[1]),
-                )
+        fraction = float(
+            np.dot(point - segment_start, segment) / length_squared
+        )
+        return min(1.0, max(0.0, fraction))
 
-            remaining_distance -= segment_length
-            segment_index += 1
-            current_point = points[segment_index]
+    @staticmethod
+    def _circle_segment_intersections(
+        circle_center: np.ndarray,
+        circle_radius_m: float,
+        segment_start: np.ndarray,
+        segment_end: np.ndarray,
+    ) -> tuple[float, ...]:
+        segment = segment_end - segment_start
+        relative_start = segment_start - circle_center
+        quadratic_a = float(np.dot(segment, segment))
+        if quadratic_a <= 1e-12:
+            return ()
 
-        return last_index, float(points[-1, 0]), float(points[-1, 1])
+        quadratic_b = 2.0 * float(np.dot(relative_start, segment))
+        quadratic_c = float(
+            np.dot(relative_start, relative_start)
+            - circle_radius_m * circle_radius_m
+        )
+        discriminant = (
+            quadratic_b * quadratic_b
+            - 4.0 * quadratic_a * quadratic_c
+        )
+        if discriminant < -1e-12:
+            return ()
+
+        square_root = float(np.sqrt(max(0.0, discriminant)))
+        denominator = 2.0 * quadratic_a
+        roots = (
+            (-quadratic_b - square_root) / denominator,
+            (-quadratic_b + square_root) / denominator,
+        )
+        intersections = []
+        for root in roots:
+            if -1e-9 <= root <= 1.0 + 1e-9:
+                bounded_root = min(1.0, max(0.0, root))
+                if not intersections or not np.isclose(
+                    bounded_root,
+                    intersections[-1],
+                ):
+                    intersections.append(bounded_root)
+
+        return tuple(intersections)
+
+    def _lookahead_distance(
+        self,
+        current_linear_velocity_m_s: float,
+    ) -> float:
+        requested_distance = (
+            self._config.minimum_lookahead_distance_m
+            + self._config.lookahead_time_s
+            * abs(current_linear_velocity_m_s)
+        )
+        return min(
+            requested_distance,
+            self._config.maximum_lookahead_distance_m,
+        )
 
     def _smoothed_angular_velocity(
         self,
