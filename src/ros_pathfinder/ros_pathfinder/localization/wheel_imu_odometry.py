@@ -5,7 +5,7 @@ from typing import Optional
 from ros_pathfinder.util.util import wrap_angle
 
 
-@dataclass(frozen=True)
+@dataclass
 class OdometryState:
     timestamp_ns: int
     x_m: float

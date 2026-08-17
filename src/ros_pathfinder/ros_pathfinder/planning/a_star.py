@@ -26,7 +26,7 @@ class AStarPlanner:
     def gridCell(self,current,width):
         x = current % width
         y = int(current/width)
-        return GridCell[x,y] 
+        return GridCell(x,y) 
 
     def plan(
         self,
@@ -62,7 +62,7 @@ class AStarPlanner:
                 heapq.heappush(q,(dist[i],i))
                 cellSet.add(i)
         while q:
-            _,current = heapq.heappop(q)
+            _,  _ ,current = heapq.heappop(q)
             if current == 0 or current % width == 0:
                 neighbors = [(-width,LATERAL),(-width+1,DIAG),(1,LATERAL),(width,LATERAL),(width+1,DIAG)]
             elif (current+1) % width == 0:
@@ -71,7 +71,7 @@ class AStarPlanner:
                 neighbors = [(-width-1,DIAG),(-width,LATERAL),(-width+1,DIAG),(-1,LATERAL),(1,LATERAL),(width-1,DIAG),(width,LATERAL),(width+1,DIAG)]
             if current == self.goal:
                 break
-            for n,cost in neighbors:
+            for n, cost in neighbors:
                 i = current + n
                 if i >= num_cells or i < 0 or i not in cellSet:
                     continue

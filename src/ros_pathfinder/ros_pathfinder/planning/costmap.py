@@ -23,8 +23,26 @@ class Costmap2d:
         self._config = config
 
     @classmethod
-    def from_occupancy(cls: "Costmap2d", occupancy_values: np.ndarray, resolution_m: float, config: CostmapConfig) -> "Costmap2d":
+    def from_occupancy(
+        cls,
+        occupancy_values: np.ndarray,
+        resolution_m: float,
+        config: CostmapConfig,
+    ) -> "Costmap2d":
         values = np.asarray(occupancy_values, dtype=np.int16).copy()
+
+        if values.ndim != 2:
+            raise ValueError("occupancy_values must have shape (height, width)")
+        if resolution_m <= 0.0:
+            raise ValueError("resolution_m must be greater than zero")
+        if config.robot_radius_m < 0.0:
+            raise ValueError("robot_radius_m cannot be negative")
+        if config.safety_margin_m < 0.0:
+            raise ValueError("safety_margin_m cannot be negative")
+        if not 0 <= config.occupied_threshold <= 100:
+            raise ValueError("occupied_threshold must be in [0, 100]")
+        if config.unknown_cost_multiplier < 1.0:
+            raise ValueError("unknown_cost_multiplier must be at least 1.0")
 
         unknown_mask = values < 0
         obstacle_mask = values >= config.occupied_threshold
@@ -38,9 +56,17 @@ class Costmap2d:
 
         clearance_radius_m = config.robot_radius_m + config.safety_margin_m
 
-        collision_mask = cls._inflate_obstacles(obstacle_mask=obstacle_mask, resolution_m=resolution_m, radius_m=clearance_radius_m)
+        collision_mask = cls._inflate_obstacles(
+            obstacle_mask=obstacle_mask,
+            resolution_m=resolution_m,
+            radius_m=clearance_radius_m,
+        )
 
-        cls._mark_map_boundary(collision_mask=collision_mask, resolution_m=resolution_m, radius_m=clearance_radius_m)
+        cls._mark_map_boundary(
+            collision_mask=collision_mask,
+            resolution_m=resolution_m,
+            radius_m=clearance_radius_m,
+        )
 
         # inflate the grid
         values[collision_mask] = OBSTACLE
@@ -87,6 +113,7 @@ class Costmap2d:
 
         return 1.0
 
+    @staticmethod
     def _inflate_obstacles(
         obstacle_mask: np.ndarray,
         resolution_m: float,
@@ -121,7 +148,12 @@ class Costmap2d:
 
         return inflated
 
-    def _mark_map_boundary(collision_mask: np.ndarray, resolution_m: float, radius_m: float) -> None:
+    @staticmethod
+    def _mark_map_boundary(
+        collision_mask: np.ndarray,
+        resolution_m: float,
+        radius_m: float,
+    ) -> None:
         border_cells = math.ceil(radius_m / resolution_m)
 
         if border_cells <= 0:

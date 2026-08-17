@@ -30,6 +30,12 @@ def generate_launch_description():
         "hardware.yaml"
     ])
 
+    navigation_config = PathJoinSubstitution([
+        FindPackageShare("ros_pathfinder"),
+        "config",
+        "navigation.yaml"
+    ])
+
     robot_description_file = PathJoinSubstitution([
         FindPackageShare("ros_pathfinder"),
         "urdf",
@@ -106,7 +112,14 @@ def generate_launch_description():
             package="ros_pathfinder",
             executable="path_planner",
             name="path_planner",
-            parameters=[],
+            parameters=[navigation_config],
+            output="both"
+        ),
+        Node(
+            package="ros_pathfinder",
+            executable="path_follower",
+            name="path_follower",
+            parameters=[navigation_config],
             output="both"
         ),
     ])

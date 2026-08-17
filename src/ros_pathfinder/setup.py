@@ -44,7 +44,7 @@ setup(
             "goal_picker = ros_pathfinder.goal_picker:main",
             "planner = ros_pathfinder.planning_node:main",
             "test = ros_pathfinder.conversionTest:main",
-            "path_follower = ros_pathfinder.path_follower:main",
+            "legacy_path_follower = ros_pathfinder.path_follower:main",
             "controller = ros_pathfinder.controller_node:main",
 
 
@@ -56,7 +56,8 @@ setup(
             "imu = ros_pathfinder.nodes.imu:main",
             "local_odometry = ros_pathfinder.nodes.local_odometry:main",
             "slam_node = ros_pathfinder.nodes.slam_node:main",
-            "path_planner = ros_pathfinder.nodes.path_planner:main"
+            "path_planner = ros_pathfinder.nodes.path_planner:main",
+            "path_follower = ros_pathfinder.nodes.path_follower:main"
         ],
     },
 )
