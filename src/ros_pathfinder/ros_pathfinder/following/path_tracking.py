@@ -117,6 +117,7 @@ class PathTracker:
         target_heading = atan2(target_y - robot_y, target_x - robot_x)
         heading_error = wrap_angle(target_heading - robot_yaw)
 
+        angular_velocity_was_limited = False
         if abs(heading_error) >= self._config.rotate_in_place_threshold_rad:
             linear_velocity = 0.0
             raw_angular_velocity = self._config.angular_gain * heading_error
@@ -143,14 +144,33 @@ class PathTracker:
                 self._config.goal_position_tolerance_m,
                 1e-6,
             )
-            raw_angular_velocity = (
+            requested_angular_velocity = (
                 self._config.angular_gain * linear_velocity * curvature
             )
+
+            angular_limit = self._config.max_angular_velocity_rad_s
+            if abs(requested_angular_velocity) > angular_limit:
+                angular_velocity_was_limited = True
+                linear_velocity *= (
+                    angular_limit / abs(requested_angular_velocity)
+                )
+                requested_angular_velocity = (
+                    self._config.angular_gain
+                    * linear_velocity
+                    * curvature
+                )
+
+            raw_angular_velocity = requested_angular_velocity
 
         angular_velocity = self._smoothed_angular_velocity(
             raw_angular_velocity,
             previous_angular_velocity_rad_s,
         )
+        if angular_velocity_was_limited:
+            linear_velocity *= (
+                abs(angular_velocity)
+                / self._config.max_angular_velocity_rad_s
+            )
         return PathTrackingCommand(
             linear_velocity_m_s=linear_velocity,
             angular_velocity_rad_s=angular_velocity,
