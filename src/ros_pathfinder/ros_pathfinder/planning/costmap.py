@@ -163,3 +163,7 @@ class Costmap2d:
         collision_mask[-border_cells:, :] = True
         collision_mask[:, :border_cells] = True
         collision_mask[:, -border_cells:] = True
+
+    def convert_to_1d(self) -> np.ndarray:
+        return self._values.reshape(-1).tolist()
+

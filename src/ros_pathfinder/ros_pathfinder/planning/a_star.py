@@ -34,6 +34,8 @@ class AStarPlanner:
         start: GridCell,
         goal: GridCell,
     ) -> Optional[AStarResult]:
+        costmap_1d = costmap.convert_to_1d()
+        
         LATERAL = 1
         DIAG = math.sqrt(2)
 
@@ -56,13 +58,13 @@ class AStarPlanner:
         q = [(totalCost[self.start],self.start)]
         
         heapq.heapify(q)
-        for i, v in enumerate(np.reshape(costmap.values, 1)):
+        for i, v in enumerate(costmap_1d):
             if i != self.start and (v == 0 or v == -1):
                 dist[i] == np.inf
                 heapq.heappush(q,(dist[i],i))
                 cellSet.add(i)
         while q:
-            _,  _, current = heapq.heappop(q)
+            _,  _ ,current = heapq.heappop(q)
             if current == 0 or current % width == 0:
                 neighbors = [(-width,LATERAL),(-width+1,DIAG),(1,LATERAL),(width,LATERAL),(width+1,DIAG)]
             elif (current+1) % width == 0:
@@ -79,7 +81,7 @@ class AStarPlanner:
                     new_dist = dist[current] + cost
                     if new_dist < dist[i]:
                         dist[i] = new_dist
-                        if costmap.values[i] == -1:
+                        if costmap_1d[i] == -1:
                             totalCost[i] = new_dist + costmap.config.unknown_cost_multiplier*self.heuristic(i,self.goal,width)
                         else:
                             totalCost[i] = new_dist + self.heuristic(i,self.goal,width)
