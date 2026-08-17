@@ -57,7 +57,7 @@ class AStarPlanner:
         
         heapq.heapify(q)
         for i,v in enumerate(costmap.values):
-            if i != self.start and v == 0:
+            if i != self.start and (v == 0 or v == -1):
                 dist[i] == np.inf
                 heapq.heappush(q,(dist[i],i))
                 cellSet.add(i)
@@ -79,7 +79,10 @@ class AStarPlanner:
                     new_dist = dist[current] + cost
                     if new_dist < dist[i]:
                         dist[i] = new_dist
-                        totalCost[i] = new_dist + self.heuristic(i,self.goal,width)
+                        if costmap.values[i] == -1:
+                            totalCost[i] = new_dist + costmap.config.unknown_cost_multiplier*self.heuristic(i,self.goal,width)
+                        else:
+                            totalCost[i] = new_dist + self.heuristic(i,self.goal,width)
                         prev[i] = current
         #if path can be found
         if current == self.goal:
