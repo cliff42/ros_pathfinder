@@ -26,7 +26,7 @@ class AStarPlanner:
     def gridCell(self,current,width):
         x = current % width
         y = int(current/width)
-        return GridCell(x,y) 
+        return x, y
 
     def plan(
         self,
