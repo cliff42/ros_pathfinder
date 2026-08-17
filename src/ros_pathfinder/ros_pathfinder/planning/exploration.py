@@ -1,10 +1,12 @@
 from ros_pathfinder.planning.costmap import Costmap2d
 from ros_pathfinder.planning.a_star import AStarPlanner
+from ros_pathfinder.planning.base_planner import GridCell
+
 import heapq
 import numpy as np
 
 class FrontierCellFinder:
-    def __init__(self,start,costmap:Costmap2d):
+    def __init__(self,start:GridCell,costmap:Costmap2d):
         
         self.costmap = costmap
         self.width = costmap.width

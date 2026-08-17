@@ -13,11 +13,13 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid, Odometry
+from geometry_msgs.msg import PoseStamped, Pose
 
 from ros_pathfinder.mapping.occupancy_grid import OccupancyGrid2d
 from ros_pathfinder.planning.a_star import AStarPlanner
 from ros_pathfinder.planning.djikstra import Djikstra
 from ros_pathfinder.planning.exploration import FrontierCellFinder
+from ros_pathfinder.planning.base_planner import GridCell
 
 import numpy as np
 import time
@@ -37,14 +39,18 @@ class Planner(Node):
         self.odom_subscription = self.create_subscription(Odometry,self.ODOM,self.odom_callback)
         self.costmap_subscription = self.create_subscription(OccupancyGrid,self.COSTMAP,self.map_callback)
         if self.mode == "manual":
-            self.goal_subscription = self.create_subscription()
+            self.goal_subscription = self.create_subscription(PoseStamped,self.MANUAL_GOAL,self.goal_callback)
+        else:
+            self.exploration_start_time = time.time()
         self.twist_publisher = self.create_publisher
 
 
-    def odom_callback(self):
-
+    def odom_callback(self,current:Odometry)->GridCell:
+        
+        #Convert to grid cell
         pass
-    def goal_callback(self):
+    def goal_callback(self,goal:PoseStamped)->GridCell:
+        #convert to grid cell
         pass
     def plan_path(self, costmap: OccupancyGrid):
         if self.path is None:
@@ -57,6 +63,9 @@ class Planner(Node):
                     if self.path is None:
                         self.get_logger.warning('Path was not found. Pick another goal location.')
             elif self.mode == "exploration":
+                if time.time() - self.exploration_start_time >= self.max_exploration_time:
+                    self.get_logger.warning(f'{self.max_exploration_time} s have elapsed since start of exploration. Switching to manual mode')
+                    self.mode = "manual"
                 solver = FrontierCellFinder(self.start,costmap)
                 self.path = solver.getPath() 
             else:
