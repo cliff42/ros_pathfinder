@@ -384,6 +384,7 @@ class PathFollowerNode(Node):
             active_goal,
             command.linear_velocity_m_s,
             command.angular_velocity_rad_s,
+            command.distance_to_goal_m,
         ):
             return
 
@@ -469,6 +470,7 @@ class PathFollowerNode(Node):
         active_goal: _ActiveGoal,
         linear_velocity_m_s: float,
         angular_velocity_rad_s: float,
+        distance_to_goal_m: float,
     ) -> bool:
         if not self._collision_monitor_enabled:
             return True
@@ -520,13 +522,28 @@ class PathFollowerNode(Node):
             return True
 
         point_x, point_y = collision.collision_point_base
+        collision_time_s = collision.time_to_collision_s
+        at_goal_position = (
+            distance_to_goal_m
+            <= self._tracking_config.goal_position_tolerance_m
+        )
+        if at_goal_position:
+            error_code = FollowPath.Result.FAILED_TO_MAKE_PROGRESS
+            message = (
+                "goal position reached, but final orientation is blocked by "
+                "a local obstacle"
+            )
+        else:
+            error_code = FollowPath.Result.NO_VALID_CONTROL
+            message = "local obstacle intersects commanded trajectory"
+
         self._finish_goal(
             active_goal,
             outcome="aborted",
-            error_code=FollowPath.Result.NO_VALID_CONTROL,
+            error_code=error_code,
             message=(
-                "local obstacle intersects commanded trajectory at "
-                f"({point_x:.2f}, {point_y:.2f}) m in base_link"
+                f"{message} at ({point_x:.2f}, {point_y:.2f}) m in "
+                f"base_link (predicted in {collision_time_s:.2f} s)"
             ),
         )
         return False

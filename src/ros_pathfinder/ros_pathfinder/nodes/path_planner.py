@@ -49,12 +49,19 @@ class PathPlannerNode(Node):
         self._replan_cooldown_s = float(
             self.get_parameter("replan_cooldown_s").value
         )
+        self._goal_position_tolerance_m = float(
+            self.get_parameter("goal_position_tolerance_m").value
+        )
         if not self._base_frame:
             raise ValueError("base_frame cannot be empty")
         if self._blocked_path_confirmations <= 0:
             raise ValueError("blocked_path_confirmations must be positive")
         if self._replan_cooldown_s < 0.0:
             raise ValueError("replan_cooldown_s must be non-negative")
+        if self._goal_position_tolerance_m < 0.0:
+            raise ValueError(
+                "goal_position_tolerance_m must be non-negative"
+            )
         self._costmap_config = CostmapConfig(
             robot_radius_m=float(
                 self.get_parameter("robot_radius_m").value
@@ -162,6 +169,7 @@ class PathPlannerNode(Node):
         self.declare_parameter("replan_on_blocked_path", True)
         self.declare_parameter("blocked_path_confirmations", 2)
         self.declare_parameter("replan_cooldown_s", 1.5)
+        self.declare_parameter("goal_position_tolerance_m", 0.12)
 
     def map_callback(self, map_msg: OccupancyGrid) -> None:
         expected_size = map_msg.info.width * map_msg.info.height
@@ -519,6 +527,12 @@ class PathPlannerNode(Node):
             )
             return
 
+        robot_x = map_to_base.transform.translation.x
+        robot_y = map_to_base.transform.translation.y
+        if self._goal_position_reached(robot_x, robot_y):
+            self._blocked_path_observations = 0
+            return
+
         points = np.array(
             [
                 [pose.pose.position.x, pose.pose.position.y]
@@ -531,8 +545,8 @@ class PathPlannerNode(Node):
                 costmap=self._costmap,
                 grid_geometry=self._grid_geometry,
                 robot_position_world=(
-                    map_to_base.transform.translation.x,
-                    map_to_base.transform.translation.y,
+                    robot_x,
+                    robot_y,
                 ),
                 path_points_world=points,
                 previous_waypoint_index=self._current_waypoint_index,
@@ -558,6 +572,21 @@ class PathPlannerNode(Node):
 
         self._blocked_path_observations = 0
         self._request_replan(validity.reason)
+
+    def _goal_position_reached(
+        self,
+        robot_x_m: float,
+        robot_y_m: float,
+    ) -> bool:
+        if self._goal is None or self._map_frame is None:
+            return False
+        if self._goal.header.frame_id != self._map_frame:
+            return False
+
+        return math.hypot(
+            self._goal.pose.position.x - robot_x_m,
+            self._goal.pose.position.y - robot_y_m,
+        ) <= self._goal_position_tolerance_m
 
     def _request_replan(self, reason: str, delay_s: float = 0.0) -> None:
         if self._goal is None:
