@@ -1,7 +1,7 @@
 path_planner:
   ros__parameters:
     base_frame: base_link
-    robot_radius_m: 0.15
+    robot_radius_m: 0.35
     safety_margin_m: 0.02
     occupied_threshold: 65
     allow_unknown: true
@@ -15,7 +15,7 @@ path_follower:
     base_frame: base_link
     control_rate_hz: 20.0
     transform_timeout_s: 1.0
-    desired_linear_velocity_m_s: 0.12
+    desired_linear_velocity_m_s: 0.24
     lookahead_distance_m: 0.20
     goal_position_tolerance_m: 0.12
     goal_yaw_tolerance_rad: 0.20
@@ -31,6 +31,6 @@ path_follower:
     footprint_max_x_m: 0.50
     footprint_min_y_m: -0.30
     footprint_max_y_m: 0.30
-    collision_margin_m: 0.05
-    collision_prediction_horizon_s: 1.5
+    collision_margin_m: 0.02
+    collision_prediction_horizon_s: 0.75
     collision_prediction_step_s: 0.05
