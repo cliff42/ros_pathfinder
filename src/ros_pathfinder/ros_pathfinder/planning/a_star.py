@@ -64,7 +64,7 @@ class AStarPlanner:
                 heapq.heappush(q,(dist[i],i))
                 cellSet.add(i)
         while q:
-            _,  _ ,current = heapq.heappop(q)
+            _, current = heapq.heappop(q)
             if current == 0 or current % width == 0:
                 neighbors = [(-width,LATERAL),(-width+1,DIAG),(1,LATERAL),(width,LATERAL),(width+1,DIAG)]
             elif (current+1) % width == 0:
