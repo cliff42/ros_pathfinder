@@ -11,7 +11,7 @@ from collections import deque
 
 
 
-class Djikstra():
+class Djikstra:
     def __init__(self,start:GridCell,costmap:Costmap2d):
         self.width = costmap.width
         self.height = costmap.height

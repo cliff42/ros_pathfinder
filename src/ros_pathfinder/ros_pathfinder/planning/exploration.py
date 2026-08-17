@@ -15,7 +15,7 @@ class FrontierCellFinder:
 
         self.frontierCells = self.getFrontierCells()
         self.frontierZones = self.getFrontierZones()
-        self.closestZone = self.getGoal()
+        self.path = self.getPath()
     def getFrontierCells(self):
         frontierCellSet = set()
         for i,v in enumerate(self.values):
@@ -58,9 +58,10 @@ class FrontierCellFinder:
                         visitedSet.remove(current+n)
                         zone.append(current+n)
             zones.append(zone)
-    def getGoal(self):
+    def getPath(self):
         lowestTarget = np.inf
         lowestScore = np.inf
+        bestPath = []
         for zone in self.frontierZones:
             target = np.random.choice(zone)
             #A-star to find distance from current to target
@@ -68,10 +69,14 @@ class FrontierCellFinder:
             cost = result.total_cost
             size = len(zone)
 
+            #score to find best frontier zone
             score = cost * (1/size)
             if score < lowestScore:
                 lowestTarget = target
                 lowestScore = score
+                bestPath = result.path
+
+        return bestPath
             
         
 
