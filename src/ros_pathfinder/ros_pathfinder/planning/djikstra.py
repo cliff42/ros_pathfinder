@@ -1,5 +1,7 @@
 from ros_pathfinder.planning.costmap import Costmap2d
 from ros_pathfinder.planning.base_planner import GridCell
+from ros_pathfinder.planning.a_star import AStarResult
+from typing import Optional
 
 import numpy as np
 import math
@@ -57,14 +59,17 @@ class Djikstra():
                         dist[i] = new_dist
                         prev[i] = current    
         return prev,dist
-    def find_path(self,end):
+    def find_path(self,end)-> Optional[AStarResult] :
         self.end = self.width*end[1]+end[0]
-        if self.dist is not np.inf:
-            path_list = deque([self.end])
+        cost = self.dist[self.end]
+        if self.dist[self.end] is not np.inf:
+            path_list = deque([self.gridCell(self.end)])
             current = self.end
             while current != self.start:
-                path_list.appendleft(self.prev[current])
+                path_list.appendleft(self.gridCell(self.prev[current]))
                 current = self.prev[current]
         else:
             path_list = None
-        return path_list
+        num_values = len(path_list)
+        result = AStarResult(path_list,cost,num_values)
+        return result
