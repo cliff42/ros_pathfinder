@@ -54,7 +54,7 @@ class _ActiveGoal:
     last_transform_time_ns: int
 
 
-# inspired by https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
+# https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
 class PathFollowerNode(Node):
     ACTION_NAME = "follow_path"
     CMD_VEL_TOPIC = "cmd_vel"
@@ -460,7 +460,7 @@ class PathFollowerNode(Node):
             base_from_laser = self._transform_buffer.lookup_transform(
                 self._base_frame,
                 msg.header.frame_id,
-                Time.from_msg(msg.header.stamp),
+                Time(),
             )
         except TransformException as error:
             now_ns = self.get_clock().now().nanoseconds

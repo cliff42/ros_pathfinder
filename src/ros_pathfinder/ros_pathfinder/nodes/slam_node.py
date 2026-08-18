@@ -1,28 +1,47 @@
 import math
-from typing import Optional
+from collections import deque
+
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data, DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+    qos_profile_sensor_data,
+)
 from rclpy.time import Time
 
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import OccupancyGrid
 
-from tf2_ros import Buffer, TransformListener, TransformBroadcaster
+from tf2_ros import (
+    Buffer,
+    TransformBroadcaster,
+    TransformException,
+    TransformListener,
+)
 
-from ros_pathfinder.localization.scan_projection import scan_to_observation
 from ros_pathfinder.localization.icp_scan_matcher import ICPScanMatcher
-from ros_pathfinder.localization.scan_localization import ScanLocalization, ScanLocalizationConfig
-from ros_pathfinder.mapping.occupancy_grid import OccupancyGrid2d, OccupancyGridConfig
-from ros_pathfinder.geometry.pose2d import Pose2d
+from ros_pathfinder.localization.scan_localization import (
+    ScanLocalization,
+    ScanLocalizationConfig,
+)
+from ros_pathfinder.localization.scan_projection import scan_to_observation
+from ros_pathfinder.mapping.occupancy_grid import (
+    OccupancyGrid2d,
+    OccupancyGridConfig,
+)
 from ros_pathfinder.geometry.footprint import FootprintBox2d
+from ros_pathfinder.geometry.pose2d import Pose2d
+
 
 class SlamNode(Node):
 
     SCAN_TOPIC = "scan"
-    MAP_TOPIC = "map" # to publish the occupancy grid
+    MAP_TOPIC = "map"  # Publishes the occupancy grid.
 
     MAP_FRAME = "map"
     ODOM_FRAME = "odom"
@@ -31,8 +50,22 @@ class SlamNode(Node):
     def __init__(self):
         super().__init__("slam_node")
 
+        self._scan_transform_timeout_s = float(
+            self.declare_parameter(
+                "scan_transform_timeout_s",
+                0.25,
+            ).value
+        )
+        if self._scan_transform_timeout_s <= 0.0:
+            raise ValueError("scan_transform_timeout_s must be positive")
+
         self._transform_buffer = Buffer()
-        self._transform_listener = TransformListener(self._transform_buffer, self)
+        self._transform_listener = TransformListener(
+            self._transform_buffer,
+            self,
+        )
+        self._pending_scans = deque(maxlen=10)
+        self._last_scan_transform_warning_ns = 0
 
         self._filter_footprint = FootprintBox2d(
             min_x_m=-0.15,
@@ -40,7 +73,7 @@ class SlamNode(Node):
             min_y_m=-0.30,
             max_y_m=0.30,
         )
-        
+
         # TODO: add config values for these
         icp_scan_matcher = ICPScanMatcher(
             max_iterations=30,
@@ -62,7 +95,10 @@ class SlamNode(Node):
             submap_grid_size_m=0.03
         )
 
-        self._scan_localization = ScanLocalization(icp_scan_matcher=icp_scan_matcher, config=scan_localization_config)
+        self._scan_localization = ScanLocalization(
+            icp_scan_matcher=icp_scan_matcher,
+            config=scan_localization_config,
+        )
 
         self._occupancy_grid_config = OccupancyGridConfig(
             resolution_m=0.05,
@@ -77,10 +113,12 @@ class SlamNode(Node):
             free_probability_threshold=0.40,
             occupied_probability_threshold=0.65
         )
-        self._occupancy_grid = OccupancyGrid2d(config=self._occupancy_grid_config)
+        self._occupancy_grid = OccupancyGrid2d(
+            config=self._occupancy_grid_config
+        )
         self._map_load_time = self.get_clock().now().to_msg()
 
-        self.publish_rate_hz = 1.0 # TODO: put in config
+        self.publish_rate_hz = 1.0  # TODO: put in config
 
         self.lidar_subscription = self.create_subscription(
             LaserScan,
@@ -106,17 +144,84 @@ class SlamNode(Node):
             (1.0 / self.publish_rate_hz),
             self.map_timer_callback
         )
+        self._scan_transform_timer = self.create_timer(
+            0.01,
+            self._process_pending_scan,
+        )
 
     def lidar_callback(self, msg: LaserScan) -> None:
+        if not msg.header.frame_id:
+            return
+
+        self._pending_scans.append(
+            (msg, self.get_clock().now().nanoseconds)
+        )
+        self._process_pending_scan()
+
+    def _process_pending_scan(self) -> None:
+        if not self._pending_scans:
+            return
+
+        msg, received_time_ns = self._pending_scans[0]
         scan_ts = Time.from_msg(msg.header.stamp)
+        odom_transform_ready = self._transform_buffer.can_transform(
+            self.ODOM_FRAME,
+            self.BASE_FRAME,
+            scan_ts,
+        )
+        laser_transform_ready = self._transform_buffer.can_transform(
+            self.BASE_FRAME,
+            msg.header.frame_id,
+            Time(),
+        )
+
+        if not (odom_transform_ready and laser_transform_ready):
+            now_ns = self.get_clock().now().nanoseconds
+            elapsed_s = (now_ns - received_time_ns) / 1e9
+            if elapsed_s < self._scan_transform_timeout_s:
+                return
+
+            self._pending_scans.popleft()
+            warning_elapsed_ns = (
+                now_ns - self._last_scan_transform_warning_ns
+            )
+            if warning_elapsed_ns >= 1000000000:
+                scan_stamp = (
+                    f"{msg.header.stamp.sec}."
+                    f"{msg.header.stamp.nanosec:09d}"
+                )
+                self.get_logger().warning(
+                    f"dropping laser scan at {scan_stamp} after waiting "
+                    f"{elapsed_s:.2f} s for transforms "
+                    f"(odom_ready={odom_transform_ready}, "
+                    f"laser_ready={laser_transform_ready})"
+                )
+                self._last_scan_transform_warning_ns = now_ns
+            return
 
         try:
-            # get the odom transform closest to the scan time
-            odom_to_base = self._transform_buffer.lookup_transform(self.ODOM_FRAME, self.BASE_FRAME, scan_ts)
-            base_to_laser = self._transform_buffer.lookup_transform(self.BASE_FRAME, msg.header.frame_id, scan_ts)
-        except Exception as e:
-            self.get_logger().warning(f"cannot get buffered transforms in lidar_callback: {e}")
+            odom_to_base = self._transform_buffer.lookup_transform(
+                self.ODOM_FRAME,
+                self.BASE_FRAME,
+                scan_ts,
+            )
+            base_to_laser = self._transform_buffer.lookup_transform(
+                self.BASE_FRAME,
+                msg.header.frame_id,
+                Time(),
+            )
+        except TransformException:
             return
+
+        self._pending_scans.popleft()
+        self._process_lidar_scan(msg, odom_to_base, base_to_laser)
+
+    def _process_lidar_scan(
+        self,
+        msg: LaserScan,
+        odom_to_base: TransformStamped,
+        base_to_laser: TransformStamped,
+    ) -> None:
 
         laser_pose_in_base = self._pose_from_transform(base_to_laser)
 
@@ -140,7 +245,7 @@ class SlamNode(Node):
 
         if localization_update.created_keyframe is not None:
             self._occupancy_grid.integrate_keyframe(
-                keyframe=localization_update.created_keyframe, 
+                keyframe=localization_update.created_keyframe,
                 map_to_base=localization_update.map_to_base
             )
 
@@ -150,8 +255,12 @@ class SlamNode(Node):
         transform.header.frame_id = self.MAP_FRAME
         transform.child_frame_id = self.ODOM_FRAME
 
-        transform.transform.translation.x = localization_update.map_to_odom.x_m
-        transform.transform.translation.y = localization_update.map_to_odom.y_m
+        transform.transform.translation.x = (
+            localization_update.map_to_odom.x_m
+        )
+        transform.transform.translation.y = (
+            localization_update.map_to_odom.y_m
+        )
         transform.transform.translation.z = 0.0
 
         half_yaw = localization_update.map_to_odom.yaw_rad / 2.0
@@ -161,7 +270,7 @@ class SlamNode(Node):
         transform.transform.rotation.z = math.sin(half_yaw)
         transform.transform.rotation.w = math.cos(half_yaw)
 
-        self.transform_broadcaster.sendTransform(transform)  
+        self.transform_broadcaster.sendTransform(transform)
 
     def map_timer_callback(self) -> None:
         msg = self._occupancy_grid_msg()
@@ -190,7 +299,9 @@ class SlamNode(Node):
         msg.info.origin.orientation.z = 0.0
         msg.info.origin.orientation.w = 1.0
 
-        msg.data = self._occupancy_grid.occupancy_values().reshape(-1).tolist()
+        msg.data = (
+            self._occupancy_grid.occupancy_values().reshape(-1).tolist()
+        )
 
         return msg
 
@@ -207,7 +318,7 @@ class SlamNode(Node):
         return Pose2d(x_m=translation.x, y_m=translation.y, yaw_rad=yaw)
 
     def _timestamp_to_ns(self, ts: Time) -> int:
-        return(int(ts.sec) * 1000000000 + int(ts.nanosec))
+        return int(ts.sec) * 1000000000 + int(ts.nanosec)
 
 
 def main(args=None) -> None:
@@ -224,6 +335,7 @@ def main(args=None) -> None:
             node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
