@@ -57,7 +57,9 @@ setup(
             "local_odometry = ros_pathfinder.nodes.local_odometry:main",
             "slam_node = ros_pathfinder.nodes.slam_node:main",
             "path_planner = ros_pathfinder.nodes.path_planner:main",
-            "path_follower = ros_pathfinder.nodes.path_follower:main"
+            "path_follower = ros_pathfinder.nodes.path_follower:main",
+            "motor_forward_test = "
+            "ros_pathfinder.tools.motor_forward_test:main",
         ],
     },
 )
