@@ -71,7 +71,7 @@ class FrontierPlanner:
         best_plan: Optional[ExplorationPlan] = None
         frontier_cells = self.find_frontier_cells(known_costmap)
 
-        for zone in self.cluster_frontier_cells(frontier_cells):
+        for zone in self.cluster_frontier_cells(frontier_cells, start):
             if len(zone) < self._minimum_frontier_size_cells:
                 continue
 
@@ -134,6 +134,7 @@ class FrontierPlanner:
     def cluster_frontier_cells(
         cls,
         frontier_cells: set[GridCell],
+        start: GridCell
     ) -> list[tuple[GridCell, ...]]:
         unvisited = set(frontier_cells)
         zones: list[tuple[GridCell, ...]] = []
@@ -158,7 +159,16 @@ class FrontierPlanner:
 
             zones.append(tuple(sorted(zone)))
 
-        return zones
+        cloest_zone = zones[0]
+        min_dist = math.inf
+        for zone in zones:
+            zgc = zone[0]
+            dist = math.sqrt((zgc[0] - start[0])**2  + (zgc[1] - start[1])**2)
+            if dist < min_dist:
+                min_dist = dist
+                cloest_zone = zone
+
+        return [cloest_zone]
 
     @staticmethod
     def _representative_cell(zone: tuple[GridCell, ...]) -> GridCell:
