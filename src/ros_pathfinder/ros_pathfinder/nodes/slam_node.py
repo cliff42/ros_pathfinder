@@ -10,7 +10,6 @@ from rclpy.qos import (
     HistoryPolicy,
     QoSProfile,
     ReliabilityPolicy,
-    qos_profile_sensor_data,
 )
 from rclpy.time import Time
 
@@ -60,6 +59,14 @@ class SlamNode(Node):
         )
         if self._scan_transform_timeout_s <= 0.0:
             raise ValueError("scan_transform_timeout_s must be positive")
+        self._transform_publish_rate_hz = float(
+            self.declare_parameter(
+                "transform_publish_rate_hz",
+                30.0,
+            ).value
+        )
+        if self._transform_publish_rate_hz <= 0.0:
+            raise ValueError("transform_publish_rate_hz must be positive")
         self._diagnostic_logging_enabled = bool(
             self.declare_parameter(
                 "diagnostic_logging_enabled",
@@ -81,14 +88,39 @@ class SlamNode(Node):
             self._transform_buffer,
             self,
         )
-        self._pending_scans = deque(maxlen=10)
+        self._pending_scans = deque(maxlen=1)
         self._last_scan_transform_warning_ns = 0
+        self._latest_map_to_odom: Optional[Pose2d] = None
 
-        self._filter_footprint = FootprintBox2d(
-            min_x_m=-0.15,
-            max_x_m=0.50,
-            min_y_m=-0.30,
-            max_y_m=0.30,
+        self_filter_padding_m = float(
+            self.declare_parameter(
+                "self_filter_padding_m",
+                0.02,
+            ).value
+        )
+        if (
+            not math.isfinite(self_filter_padding_m)
+            or self_filter_padding_m < 0.0
+        ):
+            raise ValueError(
+                "self_filter_padding_m must be finite and non-negative"
+            )
+        physical_footprint = FootprintBox2d(
+            min_x_m=float(
+                self.declare_parameter("footprint_min_x_m", -0.15).value
+            ),
+            max_x_m=float(
+                self.declare_parameter("footprint_max_x_m", 0.50).value
+            ),
+            min_y_m=float(
+                self.declare_parameter("footprint_min_y_m", -0.30).value
+            ),
+            max_y_m=float(
+                self.declare_parameter("footprint_max_y_m", 0.30).value
+            ),
+        )
+        self._filter_footprint = physical_footprint.expanded(
+            self_filter_padding_m
         )
 
         # TODO: add config values for these
@@ -137,11 +169,17 @@ class SlamNode(Node):
 
         self.publish_rate_hz = 1.0  # TODO: put in config
 
+        scan_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
         self.lidar_subscription = self.create_subscription(
             LaserScan,
             self.SCAN_TOPIC,
             self.lidar_callback,
-            qos_profile_sensor_data
+            scan_qos
         )
 
         self.map_publisher = self.create_publisher(
@@ -165,11 +203,16 @@ class SlamNode(Node):
             0.01,
             self._process_pending_scan,
         )
+        self._map_to_odom_timer = self.create_timer(
+            1.0 / self._transform_publish_rate_hz,
+            self._publish_map_to_odom_transform,
+        )
 
     def lidar_callback(self, msg: LaserScan) -> None:
         if not msg.header.frame_id:
             return
 
+        self._pending_scans.clear()
         self._pending_scans.append(
             (msg, self.get_clock().now().nanoseconds)
         )
@@ -270,21 +313,28 @@ class SlamNode(Node):
                 map_to_base=localization_update.map_to_base
             )
 
-        # broadcast the map -> odom transform
+        self._latest_map_to_odom = Pose2d(
+            x_m=localization_update.map_to_odom.x_m,
+            y_m=localization_update.map_to_odom.y_m,
+            yaw_rad=localization_update.map_to_odom.yaw_rad,
+        )
+        self._publish_map_to_odom_transform()
+
+    def _publish_map_to_odom_transform(self) -> None:
+        map_to_odom = self._latest_map_to_odom
+        if map_to_odom is None:
+            return
+
         transform = TransformStamped()
-        transform.header.stamp = msg.header.stamp
+        transform.header.stamp = self.get_clock().now().to_msg()
         transform.header.frame_id = self.MAP_FRAME
         transform.child_frame_id = self.ODOM_FRAME
 
-        transform.transform.translation.x = (
-            localization_update.map_to_odom.x_m
-        )
-        transform.transform.translation.y = (
-            localization_update.map_to_odom.y_m
-        )
+        transform.transform.translation.x = map_to_odom.x_m
+        transform.transform.translation.y = map_to_odom.y_m
         transform.transform.translation.z = 0.0
 
-        half_yaw = localization_update.map_to_odom.yaw_rad / 2.0
+        half_yaw = map_to_odom.yaw_rad / 2.0
 
         transform.transform.rotation.x = 0.0
         transform.transform.rotation.y = 0.0

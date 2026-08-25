@@ -88,11 +88,14 @@ class PathFollowerNode(Node):
         self._collision_checker = TrajectoryCollisionChecker(
             self._collision_config
         )
-        self._self_filter_footprint = FootprintBox2d(
+        physical_footprint = FootprintBox2d(
             min_x_m=self._collision_config.footprint_min_x_m,
             max_x_m=self._collision_config.footprint_max_x_m,
             min_y_m=self._collision_config.footprint_min_y_m,
             max_y_m=self._collision_config.footprint_max_y_m,
+        )
+        self._self_filter_footprint = physical_footprint.expanded(
+            self._self_filter_padding_m
         )
         self._transform_buffer = Buffer()
         self._transform_listener = TransformListener(
@@ -165,6 +168,7 @@ class PathFollowerNode(Node):
         self.declare_parameter("footprint_max_x_m", 0.50)
         self.declare_parameter("footprint_min_y_m", -0.30)
         self.declare_parameter("footprint_max_y_m", 0.30)
+        self.declare_parameter("self_filter_padding_m", 0.02)
         self.declare_parameter("collision_margin_m", 0.05)
         self.declare_parameter("collision_prediction_horizon_s", 1.5)
         self.declare_parameter("collision_prediction_step_s", 0.05)
@@ -199,6 +203,16 @@ class PathFollowerNode(Node):
         )
         if self._scan_timeout_s <= 0.0:
             raise ValueError("scan_timeout_s must be positive")
+        self._self_filter_padding_m = float(
+            self.get_parameter("self_filter_padding_m").value
+        )
+        if (
+            not math.isfinite(self._self_filter_padding_m)
+            or self._self_filter_padding_m < 0.0
+        ):
+            raise ValueError(
+                "self_filter_padding_m must be finite and non-negative"
+            )
 
         self._tracking_config = PathTrackingConfig(
             desired_linear_velocity_m_s=float(
