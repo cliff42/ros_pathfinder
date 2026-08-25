@@ -30,6 +30,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 from ros_pathfinder.following.path_tracking import (
     PathTracker,
+    PathTrackingCommand,
     PathTrackingConfig,
 )
 from ros_pathfinder.following.trajectory_collision import (
@@ -75,9 +76,11 @@ class PathFollowerNode(Node):
         self._active_goal: Optional[_ActiveGoal] = None
         self._last_transform_warning_ns = 0
         self._last_scan_transform_warning_ns = 0
+        self._last_tracking_diagnostic_ns = 0
         self._latest_scan_points_base: Optional[np.ndarray] = None
         self._latest_scan_received_time_ns: Optional[int] = None
         self._latest_linear_velocity_m_s = 0.0
+        self._latest_angular_velocity_rad_s = 0.0
 
         self._tracker = PathTracker(self._tracking_config)
         self._collision_checker = TrajectoryCollisionChecker(
@@ -152,6 +155,8 @@ class PathFollowerNode(Node):
         self.declare_parameter("minimum_linear_speed_ratio", 0.20)
         self.declare_parameter("angular_smoothing", 0.20)
         self.declare_parameter("angular_deadband_rad_s", 0.015)
+        self.declare_parameter("diagnostic_logging_enabled", True)
+        self.declare_parameter("diagnostic_log_period_s", 0.25)
         self.declare_parameter("collision_monitor_enabled", True)
         self.declare_parameter("scan_timeout_s", 0.5)
         self.declare_parameter("footprint_min_x_m", -0.15)
@@ -176,6 +181,14 @@ class PathFollowerNode(Node):
             raise ValueError("control_rate_hz must be positive")
         if self._transform_timeout_s <= 0.0:
             raise ValueError("transform_timeout_s must be positive")
+        self._diagnostic_logging_enabled = bool(
+            self.get_parameter("diagnostic_logging_enabled").value
+        )
+        self._diagnostic_log_period_s = float(
+            self.get_parameter("diagnostic_log_period_s").value
+        )
+        if self._diagnostic_log_period_s <= 0.0:
+            raise ValueError("diagnostic_log_period_s must be positive")
         self._collision_monitor_enabled = bool(
             self.get_parameter("collision_monitor_enabled").value
         )
@@ -322,6 +335,9 @@ class PathFollowerNode(Node):
         with self._state_lock:
             active_goal = self._active_goal
             current_linear_velocity_m_s = self._latest_linear_velocity_m_s
+            current_angular_velocity_rad_s = (
+                self._latest_angular_velocity_rad_s
+            )
 
         if active_goal is None:
             return
@@ -398,6 +414,18 @@ class PathFollowerNode(Node):
             command.angular_velocity_rad_s
         )
 
+        self._log_tracking_diagnostic(
+            now_ns=now_ns,
+            active_goal=active_goal,
+            robot_pose=robot_pose,
+            command=command,
+            measured_linear_velocity_m_s=current_linear_velocity_m_s,
+            measured_angular_velocity_rad_s=(
+                current_angular_velocity_rad_s
+            ),
+            force=command.goal_reached,
+        )
+
         feedback = FollowPath.Feedback()
         feedback.distance_to_goal = command.distance_to_goal_m
         feedback.speed = abs(command.linear_velocity_m_s)
@@ -427,11 +455,82 @@ class PathFollowerNode(Node):
 
     def _odom_callback(self, msg: Odometry) -> None:
         linear_velocity_m_s = float(msg.twist.twist.linear.x)
-        if not math.isfinite(linear_velocity_m_s):
+        angular_velocity_rad_s = float(msg.twist.twist.angular.z)
+        if not (
+            math.isfinite(linear_velocity_m_s)
+            and math.isfinite(angular_velocity_rad_s)
+        ):
             return
 
         with self._state_lock:
             self._latest_linear_velocity_m_s = linear_velocity_m_s
+            self._latest_angular_velocity_rad_s = angular_velocity_rad_s
+
+    def _log_tracking_diagnostic(
+        self,
+        now_ns: int,
+        active_goal: _ActiveGoal,
+        robot_pose: tuple[float, float, float],
+        command: PathTrackingCommand,
+        measured_linear_velocity_m_s: float,
+        measured_angular_velocity_rad_s: float,
+        force: bool = False,
+    ) -> None:
+        if not self._diagnostic_logging_enabled:
+            return
+
+        period_ns = int(self._diagnostic_log_period_s * 1e9)
+        if (
+            not force
+            and now_ns - self._last_tracking_diagnostic_ns < period_ns
+        ):
+            return
+        self._last_tracking_diagnostic_ns = now_ns
+
+        robot_x, robot_y, robot_yaw = robot_pose
+        goal_x, goal_y = active_goal.path_points[-1]
+        goal_yaw_error = math.atan2(
+            math.sin(active_goal.final_yaw_rad - robot_yaw),
+            math.cos(active_goal.final_yaw_rad - robot_yaw),
+        )
+        diagnostics = command.diagnostics
+        if abs(command.angular_velocity_rad_s) > 1e-6:
+            command_radius_m = abs(
+                command.linear_velocity_m_s
+                / command.angular_velocity_rad_s
+            )
+            command_radius_text = f"{command_radius_m:.3f}"
+        else:
+            command_radius_text = "inf"
+
+        self.get_logger().info(
+            "tracking_diag "
+            f"mode={diagnostics.control_mode} "
+            f"pose=({robot_x:.3f},{robot_y:.3f},"
+            f"{math.degrees(robot_yaw):.1f}deg) "
+            f"goal=({goal_x:.3f},{goal_y:.3f},"
+            f"{math.degrees(active_goal.final_yaw_rad):.1f}deg) "
+            f"xy_error={command.distance_to_goal_m:.3f}m "
+            f"goal_yaw_error={math.degrees(goal_yaw_error):.1f}deg "
+            f"target={command.target_index + 1}/"
+            f"{len(active_goal.path_points)}@"
+            f"({diagnostics.target_x_m:.3f},"
+            f"{diagnostics.target_y_m:.3f}) "
+            f"target_heading="
+            f"{math.degrees(diagnostics.target_heading_rad):.1f}deg "
+            f"heading_error="
+            f"{math.degrees(diagnostics.heading_error_rad):.1f}deg "
+            f"lookahead={diagnostics.lookahead_distance_m:.3f}m "
+            f"curvature={diagnostics.curvature_m_inv:.3f}m^-1 "
+            f"raw_w_rad_s="
+            f"{diagnostics.unconstrained_angular_velocity_rad_s:.3f} "
+            f"saturated={diagnostics.angular_velocity_saturated} "
+            f"cmd=(v={command.linear_velocity_m_s:.3f},"
+            f"w={command.angular_velocity_rad_s:.3f},"
+            f"radius={command_radius_text}) "
+            f"odom=(v={measured_linear_velocity_m_s:.3f},"
+            f"w={measured_angular_velocity_rad_s:.3f})"
+        )
 
     def _finish_goal(
         self,

@@ -6,7 +6,7 @@ import numpy as np
 from ros_pathfinder.util.util import wrap_angle
 
 
-# inspired by https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
+# Inspired by the Purdue SIGBots basic pure-pursuit controller.
 @dataclass
 class PathTrackingConfig:
     desired_linear_velocity_m_s: float = 0.18
@@ -62,6 +62,19 @@ class PathTrackingConfig:
             raise ValueError("angular_deadband_rad_s must be non-negative")
 
 
+@dataclass(frozen=True)
+class PathTrackingDiagnostics:
+    control_mode: str
+    lookahead_distance_m: float
+    target_x_m: float
+    target_y_m: float
+    target_heading_rad: float
+    heading_error_rad: float
+    curvature_m_inv: float
+    unconstrained_angular_velocity_rad_s: float
+    angular_velocity_saturated: bool
+
+
 @dataclass
 class PathTrackingCommand:
     linear_velocity_m_s: float
@@ -70,6 +83,7 @@ class PathTrackingCommand:
     distance_to_goal_m: float
     goal_position_reached: bool
     goal_reached: bool
+    diagnostics: PathTrackingDiagnostics
 
 
 class PathTracker:
@@ -133,10 +147,24 @@ class PathTracker:
                     distance_to_goal_m=distance_to_goal,
                     goal_position_reached=True,
                     goal_reached=True,
+                    diagnostics=PathTrackingDiagnostics(
+                        control_mode="goal_reached",
+                        lookahead_distance_m=lookahead_distance,
+                        target_x_m=float(goal_x),
+                        target_y_m=float(goal_y),
+                        target_heading_rad=final_yaw_rad,
+                        heading_error_rad=yaw_error,
+                        curvature_m_inv=0.0,
+                        unconstrained_angular_velocity_rad_s=0.0,
+                        angular_velocity_saturated=False,
+                    ),
                 )
 
+            requested_angular_velocity = (
+                self._config.angular_gain * yaw_error
+            )
             angular_velocity = self._smoothed_angular_velocity(
-                self._config.angular_gain * yaw_error,
+                requested_angular_velocity,
                 previous_angular_velocity_rad_s,
             )
             return PathTrackingCommand(
@@ -146,6 +174,22 @@ class PathTracker:
                 distance_to_goal_m=distance_to_goal,
                 goal_position_reached=True,
                 goal_reached=False,
+                diagnostics=PathTrackingDiagnostics(
+                    control_mode="goal_rotation",
+                    lookahead_distance_m=lookahead_distance,
+                    target_x_m=float(goal_x),
+                    target_y_m=float(goal_y),
+                    target_heading_rad=final_yaw_rad,
+                    heading_error_rad=yaw_error,
+                    curvature_m_inv=0.0,
+                    unconstrained_angular_velocity_rad_s=(
+                        requested_angular_velocity
+                    ),
+                    angular_velocity_saturated=(
+                        abs(requested_angular_velocity)
+                        > self._config.max_angular_velocity_rad_s
+                    ),
+                ),
             )
 
         target_index, target_x, target_y = self._select_target(
@@ -160,10 +204,14 @@ class PathTracker:
         heading_error = wrap_angle(target_heading - robot_yaw)
 
         angular_velocity_was_limited = False
+        curvature = 0.0
         if abs(heading_error) >= self._config.rotate_in_place_threshold_rad:
+            control_mode = "path_rotation"
             linear_velocity = 0.0
             raw_angular_velocity = self._config.angular_gain * heading_error
+            unconstrained_angular_velocity = raw_angular_velocity
         else:
+            control_mode = "pursuit"
             heading_scale = max(
                 self._config.minimum_linear_speed_ratio,
                 cos(heading_error),
@@ -189,6 +237,7 @@ class PathTracker:
             requested_angular_velocity = (
                 self._config.angular_gain * linear_velocity * curvature
             )
+            unconstrained_angular_velocity = requested_angular_velocity
 
             angular_limit = self._config.max_angular_velocity_rad_s
             if abs(requested_angular_velocity) > angular_limit:
@@ -220,6 +269,22 @@ class PathTracker:
             distance_to_goal_m=distance_to_goal,
             goal_position_reached=False,
             goal_reached=False,
+            diagnostics=PathTrackingDiagnostics(
+                control_mode=control_mode,
+                lookahead_distance_m=lookahead_distance,
+                target_x_m=target_x,
+                target_y_m=target_y,
+                target_heading_rad=target_heading,
+                heading_error_rad=heading_error,
+                curvature_m_inv=curvature,
+                unconstrained_angular_velocity_rad_s=(
+                    unconstrained_angular_velocity
+                ),
+                angular_velocity_saturated=(
+                    abs(unconstrained_angular_velocity)
+                    > self._config.max_angular_velocity_rad_s
+                ),
+            ),
         )
 
     def _select_target(
