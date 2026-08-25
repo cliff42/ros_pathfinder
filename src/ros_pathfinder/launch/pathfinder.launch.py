@@ -105,7 +105,7 @@ def generate_launch_description():
             package="ros_pathfinder",
             executable="slam_node",
             name="slam_node",
-            parameters=[],
+            parameters=[navigation_config],
             output="both"
         ),
         Node(

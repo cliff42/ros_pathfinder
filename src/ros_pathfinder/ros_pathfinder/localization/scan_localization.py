@@ -42,6 +42,8 @@ class LocalizationUpdate:
     chosen_delta: Pose2d
     status: LocalizationStatus
     icp_result: Optional[ICPResult]
+    icp_initial_transform: Optional[Pose2d]
+    icp_correction: Optional[Pose2d]
     created_keyframe: Optional[Keyframe]
     completed_submap: Optional[LocalSubmap]
 
@@ -77,6 +79,8 @@ class ScanLocalization:
             current_odom_pose
         )
         icp_result: Optional[ICPResult] = None
+        icp_initial_transform: Optional[Pose2d] = None
+        icp_correction: Optional[Pose2d] = None
         created_keyframe: Optional[Keyframe] = None
         completed_submap: Optional[LocalSubmap] = None
 
@@ -86,6 +90,7 @@ class ScanLocalization:
         else:
             submap_origin_odom_pose = self._active_submap.get_origin_keyframe().odom_pose
             submap_to_base_guess = submap_origin_odom_pose.between(current_odom_pose)
+            icp_initial_transform = submap_to_base_guess
 
             self._last_match_odom_pose = Pose2d(
                 x_m=current_odom_pose.x_m, 
@@ -98,6 +103,11 @@ class ScanLocalization:
                 previous_points_base=self._active_submap.get_points(),
                 initial_transform=submap_to_base_guess
             )
+
+            if icp_result is not None:
+                icp_correction = submap_to_base_guess.between(
+                    icp_result.delta
+                )
 
             status = self._evaluate_match(
                 result=icp_result,
@@ -146,6 +156,8 @@ class ScanLocalization:
             chosen_delta=chosen_delta,
             status=status,
             icp_result=icp_result,
+            icp_initial_transform=icp_initial_transform,
+            icp_correction=icp_correction,
             created_keyframe=created_keyframe,
             completed_submap=completed_submap
         )
@@ -177,6 +189,8 @@ class ScanLocalization:
             chosen_delta=Pose2d(),
             status=LocalizationStatus.INITIALIZED,
             icp_result=None,
+            icp_initial_transform=None,
+            icp_correction=None,
             created_keyframe=created_keyframe,
             completed_submap=None
         )

@@ -62,6 +62,7 @@ class PathFollowerNode(Node):
     CMD_VEL_TOPIC = "cmd_vel"
     SCAN_TOPIC = "scan"
     ODOM_TOPIC = "odom"
+    ODOM_FRAME = "odom"
 
     def __init__(self) -> None:
         super().__init__("path_follower")
@@ -81,6 +82,7 @@ class PathFollowerNode(Node):
         self._latest_scan_received_time_ns: Optional[int] = None
         self._latest_linear_velocity_m_s = 0.0
         self._latest_angular_velocity_rad_s = 0.0
+        self._latest_odom_yaw_rad = 0.0
 
         self._tracker = PathTracker(self._tracking_config)
         self._collision_checker = TrajectoryCollisionChecker(
@@ -338,6 +340,7 @@ class PathFollowerNode(Node):
             current_angular_velocity_rad_s = (
                 self._latest_angular_velocity_rad_s
             )
+            current_odom_yaw_rad = self._latest_odom_yaw_rad
 
         if active_goal is None:
             return
@@ -423,6 +426,7 @@ class PathFollowerNode(Node):
             measured_angular_velocity_rad_s=(
                 current_angular_velocity_rad_s
             ),
+            odom_yaw_rad=current_odom_yaw_rad,
             force=command.goal_reached,
         )
 
@@ -465,6 +469,9 @@ class PathFollowerNode(Node):
         with self._state_lock:
             self._latest_linear_velocity_m_s = linear_velocity_m_s
             self._latest_angular_velocity_rad_s = angular_velocity_rad_s
+            self._latest_odom_yaw_rad = self._yaw_from_orientation(
+                msg.pose.pose.orientation
+            )
 
     def _log_tracking_diagnostic(
         self,
@@ -474,6 +481,7 @@ class PathFollowerNode(Node):
         command: PathTrackingCommand,
         measured_linear_velocity_m_s: float,
         measured_angular_velocity_rad_s: float,
+        odom_yaw_rad: float,
         force: bool = False,
     ) -> None:
         if not self._diagnostic_logging_enabled:
@@ -494,6 +502,21 @@ class PathFollowerNode(Node):
             math.cos(active_goal.final_yaw_rad - robot_yaw),
         )
         diagnostics = command.diagnostics
+        map_to_odom_yaw_text = "unavailable"
+        try:
+            path_to_odom = self._transform_buffer.lookup_transform(
+                active_goal.path_frame,
+                self.ODOM_FRAME,
+                Time(),
+            )
+            map_to_odom_yaw = self._yaw_from_orientation(
+                path_to_odom.transform.rotation
+            )
+            map_to_odom_yaw_text = (
+                f"{math.degrees(map_to_odom_yaw):.1f}deg"
+            )
+        except TransformException:
+            pass
         if abs(command.angular_velocity_rad_s) > 1e-6:
             command_radius_m = abs(
                 command.linear_velocity_m_s
@@ -508,6 +531,8 @@ class PathFollowerNode(Node):
             f"mode={diagnostics.control_mode} "
             f"pose=({robot_x:.3f},{robot_y:.3f},"
             f"{math.degrees(robot_yaw):.1f}deg) "
+            f"odom_yaw={math.degrees(odom_yaw_rad):.1f}deg "
+            f"map_to_odom_yaw={map_to_odom_yaw_text} "
             f"goal=({goal_x:.3f},{goal_y:.3f},"
             f"{math.degrees(active_goal.final_yaw_rad):.1f}deg) "
             f"xy_error={command.distance_to_goal_m:.3f}m "
