@@ -33,6 +33,10 @@ from ros_pathfinder.following.path_tracking import (
     PathTrackingCommand,
     PathTrackingConfig,
 )
+from ros_pathfinder.following.goal_settling import (
+    GoalSettlingConfig,
+    GoalSettlingMonitor,
+)
 from ros_pathfinder.following.trajectory_collision import (
     TrajectoryCollisionChecker,
     TrajectoryCollisionConfig,
@@ -54,6 +58,7 @@ class _ActiveGoal:
     previous_angular_velocity_rad_s: float
     started_time_ns: int
     last_transform_time_ns: int
+    goal_settling_monitor: GoalSettlingMonitor
 
 
 # https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
@@ -121,11 +126,17 @@ class PathFollowerNode(Node):
             self._scan_callback,
             qos_profile_sensor_data,
         )
+        odom_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+        )
         self._odom_subscription = self.create_subscription(
             Odometry,
             self.ODOM_TOPIC,
             self._odom_callback,
-            qos_profile_sensor_data,
+            odom_qos,
         )
 
         self._action_server = ActionServer(
@@ -154,6 +165,15 @@ class PathFollowerNode(Node):
         self.declare_parameter("goal_position_tolerance_m", 0.12)
         self.declare_parameter("goal_position_tolerance_buffer_m", 0.05)
         self.declare_parameter("goal_yaw_tolerance_rad", 0.25)
+        self.declare_parameter("goal_settle_time_s", 0.25)
+        self.declare_parameter(
+            "goal_linear_velocity_tolerance_m_s",
+            0.03,
+        )
+        self.declare_parameter(
+            "goal_angular_velocity_tolerance_rad_s",
+            0.15,
+        )
         self.declare_parameter("rotate_in_place_threshold_rad", 0.85)
         self.declare_parameter("angular_gain", 1.0)
         self.declare_parameter("max_angular_velocity_rad_s", 0.65)
@@ -213,6 +233,22 @@ class PathFollowerNode(Node):
             raise ValueError(
                 "self_filter_padding_m must be finite and non-negative"
             )
+
+        self._goal_settling_config = GoalSettlingConfig(
+            linear_velocity_tolerance_m_s=float(
+                self.get_parameter(
+                    "goal_linear_velocity_tolerance_m_s"
+                ).value
+            ),
+            angular_velocity_tolerance_rad_s=float(
+                self.get_parameter(
+                    "goal_angular_velocity_tolerance_rad_s"
+                ).value
+            ),
+            settle_time_s=float(
+                self.get_parameter("goal_settle_time_s").value
+            ),
+        )
 
         self._tracking_config = PathTrackingConfig(
             desired_linear_velocity_m_s=float(
@@ -335,6 +371,9 @@ class PathFollowerNode(Node):
             previous_angular_velocity_rad_s=0.0,
             started_time_ns=now_ns,
             last_transform_time_ns=now_ns,
+            goal_settling_monitor=GoalSettlingMonitor(
+                self._goal_settling_config
+            ),
         )
 
         with self._state_lock:
@@ -400,6 +439,9 @@ class PathFollowerNode(Node):
             transform.translation.y,
             self._yaw_from_orientation(transform.rotation),
         )
+        pose_transform_age_s = (
+            now_ns - self._timestamp_to_ns(path_to_base.header.stamp)
+        ) * 1e-9
         active_goal.last_transform_time_ns = now_ns
 
         try:
@@ -430,6 +472,12 @@ class PathFollowerNode(Node):
         active_goal.previous_angular_velocity_rad_s = (
             command.angular_velocity_rad_s
         )
+        goal_settled = active_goal.goal_settling_monitor.update(
+            goal_pose_reached=command.goal_reached,
+            linear_velocity_m_s=current_linear_velocity_m_s,
+            angular_velocity_rad_s=current_angular_velocity_rad_s,
+            timestamp_ns=now_ns,
+        )
 
         self._log_tracking_diagnostic(
             now_ns=now_ns,
@@ -441,7 +489,9 @@ class PathFollowerNode(Node):
                 current_angular_velocity_rad_s
             ),
             odom_yaw_rad=current_odom_yaw_rad,
-            force=command.goal_reached,
+            pose_transform_age_s=pose_transform_age_s,
+            goal_settled=goal_settled,
+            force=goal_settled,
         )
 
         feedback = FollowPath.Feedback()
@@ -450,6 +500,9 @@ class PathFollowerNode(Node):
         active_goal.goal_handle.publish_feedback(feedback)
 
         if command.goal_reached:
+            self._publish_stop()
+            if not goal_settled:
+                return
             self._finish_goal(
                 active_goal,
                 outcome="succeeded",
@@ -496,6 +549,8 @@ class PathFollowerNode(Node):
         measured_linear_velocity_m_s: float,
         measured_angular_velocity_rad_s: float,
         odom_yaw_rad: float,
+        pose_transform_age_s: float,
+        goal_settled: bool,
         force: bool = False,
     ) -> None:
         if not self._diagnostic_logging_enabled:
@@ -547,10 +602,12 @@ class PathFollowerNode(Node):
             f"{math.degrees(robot_yaw):.1f}deg) "
             f"odom_yaw={math.degrees(odom_yaw_rad):.1f}deg "
             f"map_to_odom_yaw={map_to_odom_yaw_text} "
+            f"pose_tf_age={pose_transform_age_s * 1000.0:.1f}ms "
             f"goal=({goal_x:.3f},{goal_y:.3f},"
             f"{math.degrees(active_goal.final_yaw_rad):.1f}deg) "
             f"xy_error={command.distance_to_goal_m:.3f}m "
             f"goal_yaw_error={math.degrees(goal_yaw_error):.1f}deg "
+            f"goal_settled={goal_settled} "
             f"target={command.target_index + 1}/"
             f"{len(active_goal.path_points)}@"
             f"({diagnostics.target_x_m:.3f},"
@@ -779,6 +836,10 @@ class PathFollowerNode(Node):
                 + orientation.z * orientation.z
             ),
         )
+
+    @staticmethod
+    def _timestamp_to_ns(timestamp) -> int:
+        return int(timestamp.sec) * 1_000_000_000 + int(timestamp.nanosec)
 
     def destroy_node(self):
         with self._state_lock:

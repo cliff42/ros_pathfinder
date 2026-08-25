@@ -1,4 +1,17 @@
 velocity_controller:
   ros__parameters:
-    max_wheel_rad_s: 5.0 # TODO: measure this (~0.5 m/s right now)
+    control_rate_hz: 20.0
+    command_timeout_s: 0.5
+    feedback_timeout_s: 0.25
+    max_wheel_rad_s: 5.0
+    max_wheel_acceleration_rad_s2: 4.0
     max_abs_effort: 0.40
+    proportional_gain: 0.04
+    integral_gain: 0.08
+    left_feedforward_gain: 0.02
+    right_feedforward_gain: 0.02
+    integral_limit_rad: 2.0
+    stopped_velocity_tolerance_rad_s: 0.10
+    measured_velocity_filter_alpha: 0.35
+    diagnostic_logging_enabled: true
+    diagnostic_log_period_s: 0.5

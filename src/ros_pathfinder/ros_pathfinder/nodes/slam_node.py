@@ -1,9 +1,11 @@
 import math
 from collections import deque
+from threading import Lock
 from typing import Optional
 
 import rclpy
-from rclpy.executors import ExternalShutdownException
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -91,6 +93,8 @@ class SlamNode(Node):
         self._pending_scans = deque(maxlen=1)
         self._last_scan_transform_warning_ns = 0
         self._latest_map_to_odom: Optional[Pose2d] = None
+        self._map_to_odom_lock = Lock()
+        self._transform_callback_group = MutuallyExclusiveCallbackGroup()
 
         self_filter_padding_m = float(
             self.declare_parameter(
@@ -206,6 +210,7 @@ class SlamNode(Node):
         self._map_to_odom_timer = self.create_timer(
             1.0 / self._transform_publish_rate_hz,
             self._publish_map_to_odom_transform,
+            callback_group=self._transform_callback_group,
         )
 
     def lidar_callback(self, msg: LaserScan) -> None:
@@ -313,17 +318,23 @@ class SlamNode(Node):
                 map_to_base=localization_update.map_to_base
             )
 
-        self._latest_map_to_odom = Pose2d(
-            x_m=localization_update.map_to_odom.x_m,
-            y_m=localization_update.map_to_odom.y_m,
-            yaw_rad=localization_update.map_to_odom.yaw_rad,
-        )
-        self._publish_map_to_odom_transform()
+        with self._map_to_odom_lock:
+            self._latest_map_to_odom = Pose2d(
+                x_m=localization_update.map_to_odom.x_m,
+                y_m=localization_update.map_to_odom.y_m,
+                yaw_rad=localization_update.map_to_odom.yaw_rad,
+            )
 
     def _publish_map_to_odom_transform(self) -> None:
-        map_to_odom = self._latest_map_to_odom
-        if map_to_odom is None:
-            return
+        with self._map_to_odom_lock:
+            latest_transform = self._latest_map_to_odom
+            if latest_transform is None:
+                return
+            map_to_odom = Pose2d(
+                x_m=latest_transform.x_m,
+                y_m=latest_transform.y_m,
+                yaw_rad=latest_transform.yaw_rad,
+            )
 
         transform = TransformStamped()
         transform.header.stamp = self.get_clock().now().to_msg()
@@ -457,15 +468,19 @@ class SlamNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = None
+    executor = MultiThreadedExecutor(num_threads=2)
 
     try:
         node = SlamNode()
-        rclpy.spin(node)
+        executor.add_node(node)
+        executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         if node is not None:
+            executor.remove_node(node)
             node.destroy_node()
+        executor.shutdown()
         if rclpy.ok():
             rclpy.shutdown()
 
