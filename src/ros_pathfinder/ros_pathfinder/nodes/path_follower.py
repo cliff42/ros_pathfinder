@@ -49,6 +49,7 @@ class _ActiveGoal:
     path_points: np.ndarray
     final_yaw_rad: float
     target_index: int
+    goal_position_reached: bool
     previous_angular_velocity_rad_s: float
     started_time_ns: int
     last_transform_time_ns: int
@@ -138,17 +139,18 @@ class PathFollowerNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("control_rate_hz", 20.0)
         self.declare_parameter("transform_timeout_s", 1.0)
-        self.declare_parameter("desired_linear_velocity_m_s", 0.12)
-        self.declare_parameter("minimum_lookahead_distance_m", 0.12)
-        self.declare_parameter("lookahead_time_s", 0.50)
-        self.declare_parameter("maximum_lookahead_distance_m", 0.30)
-        self.declare_parameter("goal_position_tolerance_m", 0.08)
-        self.declare_parameter("goal_yaw_tolerance_rad", 0.12)
-        self.declare_parameter("rotate_in_place_threshold_rad", 1.05)
+        self.declare_parameter("desired_linear_velocity_m_s", 0.18)
+        self.declare_parameter("minimum_lookahead_distance_m", 0.10)
+        self.declare_parameter("lookahead_time_s", 0.30)
+        self.declare_parameter("maximum_lookahead_distance_m", 0.18)
+        self.declare_parameter("goal_position_tolerance_m", 0.12)
+        self.declare_parameter("goal_position_tolerance_buffer_m", 0.05)
+        self.declare_parameter("goal_yaw_tolerance_rad", 0.25)
+        self.declare_parameter("rotate_in_place_threshold_rad", 0.85)
         self.declare_parameter("angular_gain", 1.0)
-        self.declare_parameter("max_angular_velocity_rad_s", 0.45)
-        self.declare_parameter("minimum_linear_speed_ratio", 0.25)
-        self.declare_parameter("angular_smoothing", 0.35)
+        self.declare_parameter("max_angular_velocity_rad_s", 0.65)
+        self.declare_parameter("minimum_linear_speed_ratio", 0.20)
+        self.declare_parameter("angular_smoothing", 0.20)
         self.declare_parameter("angular_deadband_rad_s", 0.015)
         self.declare_parameter("collision_monitor_enabled", True)
         self.declare_parameter("scan_timeout_s", 0.5)
@@ -198,6 +200,11 @@ class PathFollowerNode(Node):
             ),
             goal_position_tolerance_m=float(
                 self.get_parameter("goal_position_tolerance_m").value
+            ),
+            goal_position_tolerance_buffer_m=float(
+                self.get_parameter(
+                    "goal_position_tolerance_buffer_m"
+                ).value
             ),
             goal_yaw_tolerance_rad=float(
                 self.get_parameter("goal_yaw_tolerance_rad").value
@@ -295,6 +302,7 @@ class PathFollowerNode(Node):
             path_points=points,
             final_yaw_rad=final_yaw,
             target_index=0,
+            goal_position_reached=False,
             previous_angular_velocity_rad_s=0.0,
             started_time_ns=now_ns,
             last_transform_time_ns=now_ns,
@@ -371,6 +379,9 @@ class PathFollowerNode(Node):
                 previous_angular_velocity_rad_s=(
                     active_goal.previous_angular_velocity_rad_s
                 ),
+                goal_position_reached=(
+                    active_goal.goal_position_reached
+                ),
             )
         except ValueError as error:
             self._finish_goal(
@@ -382,6 +393,7 @@ class PathFollowerNode(Node):
             return
 
         active_goal.target_index = command.target_index
+        active_goal.goal_position_reached = command.goal_position_reached
         active_goal.previous_angular_velocity_rad_s = (
             command.angular_velocity_rad_s
         )
@@ -404,7 +416,7 @@ class PathFollowerNode(Node):
             active_goal,
             command.linear_velocity_m_s,
             command.angular_velocity_rad_s,
-            command.distance_to_goal_m,
+            command.goal_position_reached,
         ):
             return
 
@@ -498,7 +510,7 @@ class PathFollowerNode(Node):
         active_goal: _ActiveGoal,
         linear_velocity_m_s: float,
         angular_velocity_rad_s: float,
-        distance_to_goal_m: float,
+        goal_position_reached: bool,
     ) -> bool:
         if not self._collision_monitor_enabled:
             return True
@@ -551,11 +563,7 @@ class PathFollowerNode(Node):
 
         point_x, point_y = collision.collision_point_base
         collision_time_s = collision.time_to_collision_s
-        at_goal_position = (
-            distance_to_goal_m
-            <= self._tracking_config.goal_position_tolerance_m
-        )
-        if at_goal_position:
+        if goal_position_reached:
             error_code = FollowPath.Result.FAILED_TO_MAKE_PROGRESS
             message = (
                 "goal position reached, but final orientation is blocked by "

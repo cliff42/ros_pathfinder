@@ -9,17 +9,18 @@ from ros_pathfinder.util.util import wrap_angle
 # inspired by https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
 @dataclass
 class PathTrackingConfig:
-    desired_linear_velocity_m_s: float = 0.12
-    minimum_lookahead_distance_m: float = 0.12
-    lookahead_time_s: float = 0.50
-    maximum_lookahead_distance_m: float = 0.30
-    goal_position_tolerance_m: float = 0.08
-    goal_yaw_tolerance_rad: float = 0.12
-    rotate_in_place_threshold_rad: float = 1.05
+    desired_linear_velocity_m_s: float = 0.18
+    minimum_lookahead_distance_m: float = 0.10
+    lookahead_time_s: float = 0.30
+    maximum_lookahead_distance_m: float = 0.18
+    goal_position_tolerance_m: float = 0.12
+    goal_position_tolerance_buffer_m: float = 0.05
+    goal_yaw_tolerance_rad: float = 0.25
+    rotate_in_place_threshold_rad: float = 0.85
     angular_gain: float = 1.0
-    max_angular_velocity_rad_s: float = 0.45
-    minimum_linear_speed_ratio: float = 0.25
-    angular_smoothing: float = 0.35
+    max_angular_velocity_rad_s: float = 0.65
+    minimum_linear_speed_ratio: float = 0.20
+    angular_smoothing: float = 0.20
     angular_deadband_rad_s: float = 0.015
 
     def __post_init__(self) -> None:
@@ -41,6 +42,10 @@ class PathTrackingConfig:
             )
         if self.goal_position_tolerance_m < 0.0:
             raise ValueError("goal_position_tolerance_m must be non-negative")
+        if self.goal_position_tolerance_buffer_m < 0.0:
+            raise ValueError(
+                "goal_position_tolerance_buffer_m must be non-negative"
+            )
         if self.goal_yaw_tolerance_rad < 0.0:
             raise ValueError("goal_yaw_tolerance_rad must be non-negative")
         if self.rotate_in_place_threshold_rad <= 0.0:
@@ -63,6 +68,7 @@ class PathTrackingCommand:
     angular_velocity_rad_s: float
     target_index: int
     distance_to_goal_m: float
+    goal_position_reached: bool
     goal_reached: bool
 
 
@@ -78,6 +84,7 @@ class PathTracker:
         current_linear_velocity_m_s: float = 0.0,
         previous_target_index: int = 0,
         previous_angular_velocity_rad_s: float = 0.0,
+        goal_position_reached: bool = False,
     ) -> PathTrackingCommand:
         points = np.asarray(path_points, dtype=float)
         if points.ndim != 2 or points.shape[1] != 2 or len(points) == 0:
@@ -104,7 +111,19 @@ class PathTracker:
             current_linear_velocity_m_s
         )
 
+        if (
+            goal_position_reached
+            and distance_to_goal
+            > (
+                self._config.goal_position_tolerance_m
+                + self._config.goal_position_tolerance_buffer_m
+            )
+        ):
+            goal_position_reached = False
         if distance_to_goal <= self._config.goal_position_tolerance_m:
+            goal_position_reached = True
+
+        if goal_position_reached:
             yaw_error = wrap_angle(final_yaw_rad - robot_yaw)
             if abs(yaw_error) <= self._config.goal_yaw_tolerance_rad:
                 return PathTrackingCommand(
@@ -112,6 +131,7 @@ class PathTracker:
                     angular_velocity_rad_s=0.0,
                     target_index=last_index,
                     distance_to_goal_m=distance_to_goal,
+                    goal_position_reached=True,
                     goal_reached=True,
                 )
 
@@ -124,6 +144,7 @@ class PathTracker:
                 angular_velocity_rad_s=angular_velocity,
                 target_index=last_index,
                 distance_to_goal_m=distance_to_goal,
+                goal_position_reached=True,
                 goal_reached=False,
             )
 
@@ -197,6 +218,7 @@ class PathTracker:
             angular_velocity_rad_s=angular_velocity,
             target_index=target_index,
             distance_to_goal_m=distance_to_goal,
+            goal_position_reached=False,
             goal_reached=False,
         )
 
