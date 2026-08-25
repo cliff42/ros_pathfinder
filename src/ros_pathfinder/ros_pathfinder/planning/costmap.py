@@ -1,12 +1,13 @@
 import math
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 UNKNOWN = -1
 FREE = 0
 OBSTACLE = 100
+
 
 @dataclass
 class CostmapConfig:
@@ -16,8 +17,14 @@ class CostmapConfig:
     allow_unknown: bool = False
     unknown_cost_multiplier: float = 3.0
 
+
 class Costmap2d:
-    def __init__(self, values: np.ndarray, resolution_m: float, config: CostmapConfig) -> None:
+    def __init__(
+        self,
+        values: np.ndarray,
+        resolution_m: float,
+        config: CostmapConfig,
+    ) -> None:
         self._values = values
         self._resolution_m = resolution_m
         self._config = config
@@ -32,7 +39,9 @@ class Costmap2d:
         values = np.asarray(occupancy_values, dtype=np.int16).copy()
 
         if values.ndim != 2:
-            raise ValueError("occupancy_values must have shape (height, width)")
+            raise ValueError(
+                "occupancy_values must have shape (height, width)"
+            )
         if resolution_m <= 0.0:
             raise ValueError("resolution_m must be greater than zero")
         if config.robot_radius_m < 0.0:
@@ -87,6 +96,17 @@ class Costmap2d:
     @property
     def height(self) -> int:
         return self._values.shape[0]
+
+    @property
+    def resolution_m(self) -> float:
+        return self._resolution_m
+
+    def with_allow_unknown(self, allow_unknown: bool) -> "Costmap2d":
+        return Costmap2d(
+            values=self._values,
+            resolution_m=self._resolution_m,
+            config=replace(self._config, allow_unknown=allow_unknown),
+        )
 
     def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -166,4 +186,3 @@ class Costmap2d:
 
     def convert_to_1d(self) -> np.ndarray:
         return self._values.reshape(-1).tolist()
-

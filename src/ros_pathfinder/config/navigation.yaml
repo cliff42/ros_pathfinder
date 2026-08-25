@@ -22,13 +22,18 @@ path_planner:
     blocked_path_confirmations: 2
     replan_cooldown_s: 1.5
     goal_position_tolerance_m: 0.12
+    minimum_frontier_size_cells: 5
+    minimum_frontier_distance_m: 0.30
+    frontier_size_weight: 1.0
+    exploration_goal_pause_s: 0.75
+    planning_mode: goal
 
 path_follower:
   ros__parameters:
     base_frame: base_link
     control_rate_hz: 20.0
     transform_timeout_s: 1.0
-    desired_linear_velocity_m_s: 0.18
+    desired_linear_velocity_m_s: 0.24
     minimum_lookahead_distance_m: 0.10
     lookahead_time_s: 0.30
     maximum_lookahead_distance_m: 0.18

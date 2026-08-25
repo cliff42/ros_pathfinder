@@ -22,6 +22,10 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from ros_pathfinder.geometry.pose2d import Pose2d
 from ros_pathfinder.planning.a_star import AStarPlanner
 from ros_pathfinder.planning.costmap import Costmap2d, CostmapConfig
+from ros_pathfinder.planning.exploration import (
+    ExplorationPlan,
+    FrontierPlanner,
+)
 from ros_pathfinder.planning.grid_geometry import GridGeometry2d
 from ros_pathfinder.planning.path_simplification import simplify_grid_path
 from ros_pathfinder.planning.path_validation import validate_remaining_path
@@ -52,8 +56,16 @@ class PathPlannerNode(Node):
         self._goal_position_tolerance_m = float(
             self.get_parameter("goal_position_tolerance_m").value
         )
+        self._planning_mode = str(
+            self.get_parameter("planning_mode").value
+        ).strip().lower()
+        self._exploration_goal_pause_s = float(
+            self.get_parameter("exploration_goal_pause_s").value
+        )
         if not self._base_frame:
             raise ValueError("base_frame cannot be empty")
+        if self._planning_mode not in {"goal", "explore"}:
+            raise ValueError("planning_mode must be 'goal' or 'explore'")
         if self._blocked_path_confirmations <= 0:
             raise ValueError("blocked_path_confirmations must be positive")
         if self._replan_cooldown_s < 0.0:
@@ -62,6 +74,8 @@ class PathPlannerNode(Node):
             raise ValueError(
                 "goal_position_tolerance_m must be non-negative"
             )
+        if self._exploration_goal_pause_s < 0.0:
+            raise ValueError("exploration_goal_pause_s cannot be negative")
         self._costmap_config = CostmapConfig(
             robot_radius_m=float(
                 self.get_parameter("robot_radius_m").value
@@ -101,6 +115,21 @@ class PathPlannerNode(Node):
         )
 
         self._planner = AStarPlanner()
+        self._frontier_planner = FrontierPlanner(
+            minimum_frontier_size_cells=int(
+                self.get_parameter(
+                    "minimum_frontier_size_cells"
+                ).value
+            ),
+            minimum_frontier_distance_m=float(
+                self.get_parameter(
+                    "minimum_frontier_distance_m"
+                ).value
+            ),
+            frontier_size_weight=float(
+                self.get_parameter("frontier_size_weight").value
+            ),
+        )
 
         self._transform_buffer = Buffer()
         self._transform_listener = TransformListener(
@@ -110,7 +139,8 @@ class PathPlannerNode(Node):
 
         self._map_frame: Optional[str] = None
         self._goal: Optional[PoseStamped] = None
-        self._plan_requested = False
+        self._plan_requested = self._planning_mode == "explore"
+        self._exploration_complete = False
         self._earliest_replan_ns = 0
 
         # goal comes from rviz goal pose
@@ -158,6 +188,7 @@ class PathPlannerNode(Node):
             0.5,
             self._dispatch_pending_path,
         )
+        self.get_logger().info(f"planning mode: {self._planning_mode}")
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("base_frame", "base_link")
@@ -170,6 +201,11 @@ class PathPlannerNode(Node):
         self.declare_parameter("blocked_path_confirmations", 2)
         self.declare_parameter("replan_cooldown_s", 1.5)
         self.declare_parameter("goal_position_tolerance_m", 0.12)
+        self.declare_parameter("planning_mode", "goal")
+        self.declare_parameter("minimum_frontier_size_cells", 5)
+        self.declare_parameter("minimum_frontier_distance_m", 0.30)
+        self.declare_parameter("frontier_size_weight", 1.0)
+        self.declare_parameter("exploration_goal_pause_s", 0.75)
 
     def map_callback(self, map_msg: OccupancyGrid) -> None:
         expected_size = map_msg.info.width * map_msg.info.height
@@ -217,6 +253,12 @@ class PathPlannerNode(Node):
             self._try_plan()
 
     def goal_callback(self, msg: PoseStamped) -> None:
+        if self._planning_mode != "goal":
+            self.get_logger().warning(
+                "ignoring goal_pose because planning_mode is 'explore'"
+            )
+            return
+
         self._goal_generation += 1
         self._goal = msg
         self._plan_requested = True
@@ -237,11 +279,16 @@ class PathPlannerNode(Node):
             self._costmap is None
             or self._grid_geometry is None
             or self._map_frame is None
-            or self._goal is None
         ):
             return
 
-        if self._goal.header.frame_id != self._map_frame:
+        if self._planning_mode == "goal" and self._goal is None:
+            return
+
+        if (
+            self._planning_mode == "goal"
+            and self._goal.header.frame_id != self._map_frame
+        ):
             self.get_logger().warning("goal is not expressed in the map frame")
             self._finish_failed_plan()
             return
@@ -263,35 +310,58 @@ class PathPlannerNode(Node):
             map_to_base.transform.translation.y,
         )
 
-        goal = self._grid_geometry.world_to_cell(
-            self._goal.pose.position.x,
-            self._goal.pose.position.y,
-        )
-
         if start is None:
             self.get_logger().warning("robot pose is outside the costmap")
             self._finish_failed_plan()
             return
 
-        if goal is None:
-            self.get_logger().warning("goal is outside the costmap")
-            self._finish_failed_plan()
-            return
+        if self._planning_mode == "explore":
+            exploration_plan = self._frontier_planner.plan(
+                costmap=self._costmap,
+                start=start,
+            )
+            if exploration_plan is None:
+                self._finish_exploration()
+                return
 
-        result = self._planner.plan(
-            costmap=self._costmap,
-            start=start,
-            goal=goal,
-        )
+            self._goal_generation += 1
+            self._goal = self._exploration_goal_pose(exploration_plan)
+            self._exploration_complete = False
+            raw_path = list(exploration_plan.path)
+            path_costmap = self._costmap.with_allow_unknown(False)
+            self.get_logger().info(
+                "selected frontier "
+                f"cell={exploration_plan.goal} "
+                f"size={exploration_plan.frontier_size} "
+                f"cost={exploration_plan.travel_cost:.1f} "
+                f"score={exploration_plan.score:.3f}"
+            )
+        else:
+            goal = self._grid_geometry.world_to_cell(
+                self._goal.pose.position.x,
+                self._goal.pose.position.y,
+            )
 
-        if result is None or not result.path:
-            self.get_logger().warning("no path could be found")
-            self._finish_failed_plan()
-            return
+            if goal is None:
+                self.get_logger().warning("goal is outside the costmap")
+                self._finish_failed_plan()
+                return
 
-        raw_path = list(result.path)
+            result = self._planner.plan(
+                costmap=self._costmap,
+                start=start,
+                goal=goal,
+            )
+
+            if result is None or not result.path:
+                self.get_logger().warning("no path could be found")
+                self._finish_failed_plan()
+                return
+
+            raw_path = list(result.path)
+            path_costmap = self._costmap
         try:
-            path = simplify_grid_path(self._costmap, raw_path)
+            path = simplify_grid_path(path_costmap, raw_path)
         except ValueError as error:
             self.get_logger().error(
                 f"planner returned an invalid path: {error}"
@@ -365,6 +435,17 @@ class PathPlannerNode(Node):
         self._earliest_replan_ns = 0
         self._publish_empty_path()
 
+    def _finish_exploration(self) -> None:
+        self._plan_requested = False
+        self._earliest_replan_ns = 0
+        self._goal = None
+        self._publish_empty_path()
+        if not self._exploration_complete:
+            self.get_logger().info(
+                "exploration complete: no reachable frontiers remain"
+            )
+        self._exploration_complete = True
+
     def _queue_path_for_following(self, path: Path) -> None:
         self._pending_follow_path = path
         self._pending_follow_generation = self._goal_generation
@@ -373,6 +454,8 @@ class PathPlannerNode(Node):
         self._cancel_active_following()
 
     def _dispatch_pending_path(self) -> None:
+        if self._plan_requested:
+            self._try_plan()
         if self._pending_follow_path is None:
             return
         if self._follow_goal_request_future is not None:
@@ -499,6 +582,17 @@ class PathPlannerNode(Node):
                 "follower detected a local obstacle",
                 delay_s=self._replan_cooldown_s,
             )
+        elif (
+            self._planning_mode == "explore"
+            and succeeded
+            and generation == self._goal_generation
+        ):
+            self._goal = None
+            self._plan_requested = True
+            self._earliest_replan_ns = (
+                self.get_clock().now().nanoseconds
+                + int(self._exploration_goal_pause_s * 1e9)
+            )
 
     def _check_active_path(self) -> None:
         if not self._replan_on_blocked_path:
@@ -603,6 +697,35 @@ class PathPlannerNode(Node):
         self._pending_follow_generation = None
         self._follow_stop_requested = True
         self._cancel_active_following()
+
+    def _exploration_goal_pose(
+        self,
+        exploration_plan: ExplorationPlan,
+    ) -> PoseStamped:
+        x_m, y_m = self._grid_geometry.cell_center_in_world(
+            exploration_plan.goal
+        )
+        yaw_grid_rad = exploration_plan.goal_yaw_grid_rad
+        if yaw_grid_rad is None and len(exploration_plan.path) >= 2:
+            previous = exploration_plan.path[-2]
+            yaw_grid_rad = math.atan2(
+                exploration_plan.goal[1] - previous[1],
+                exploration_plan.goal[0] - previous[0],
+            )
+        if yaw_grid_rad is None:
+            yaw_grid_rad = 0.0
+
+        yaw_world_rad = (
+            self._grid_geometry.origin_in_world.yaw_rad + yaw_grid_rad
+        )
+        goal = PoseStamped()
+        goal.header.frame_id = self._map_frame
+        goal.header.stamp = self.get_clock().now().to_msg()
+        goal.pose.position.x = x_m
+        goal.pose.position.y = y_m
+        goal.pose.orientation.z = math.sin(yaw_world_rad / 2.0)
+        goal.pose.orientation.w = math.cos(yaw_world_rad / 2.0)
+        return goal
 
     def _cancel_active_following(self) -> None:
         if self._follow_goal_handle is None:
