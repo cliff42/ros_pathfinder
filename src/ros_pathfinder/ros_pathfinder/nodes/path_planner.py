@@ -1,4 +1,5 @@
 import math
+import time
 from typing import Optional
 
 import numpy as np
@@ -316,11 +317,19 @@ class PathPlannerNode(Node):
             return
 
         if self._planning_mode == "explore":
+            selection_started = time.perf_counter()
             exploration_plan = self._frontier_planner.plan(
                 costmap=self._costmap,
                 start=start,
             )
+            selection_time_ms = (
+                time.perf_counter() - selection_started
+            ) * 1000.0
             if exploration_plan is None:
+                self.get_logger().info(
+                    "frontier selection found no goal "
+                    f"in {selection_time_ms:.1f} ms"
+                )
                 self._finish_exploration()
                 return
 
@@ -334,7 +343,8 @@ class PathPlannerNode(Node):
                 f"cell={exploration_plan.goal} "
                 f"size={exploration_plan.frontier_size} "
                 f"cost={exploration_plan.travel_cost:.1f} "
-                f"score={exploration_plan.score:.3f}"
+                f"score={exploration_plan.score:.3f} "
+                f"selection_time={selection_time_ms:.1f}ms"
             )
         else:
             goal = self._grid_geometry.world_to_cell(

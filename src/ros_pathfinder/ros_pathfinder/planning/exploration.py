@@ -3,9 +3,11 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from ros_pathfinder.planning.a_star import AStarPlanner
+import numpy as np
+
 from ros_pathfinder.planning.base_planner import GridCell
-from ros_pathfinder.planning.costmap import Costmap2d, UNKNOWN
+from ros_pathfinder.planning.a_star import AStarPlanner
+from ros_pathfinder.planning.costmap import Costmap2d, OBSTACLE, UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -19,12 +21,6 @@ class ExplorationPlan:
 
 
 class FrontierPlanner:
-    _CARDINAL_NEIGHBORS = (
-        (-1, 0),
-        (1, 0),
-        (0, -1),
-        (0, 1),
-    )
     _CLUSTER_NEIGHBORS = (
         (-1, -1),
         (0, -1),
@@ -68,21 +64,36 @@ class FrontierPlanner:
         if not known_costmap.is_traversable(*start):
             return None
 
-        best_plan: Optional[ExplorationPlan] = None
         frontier_cells = self.find_frontier_cells(known_costmap)
+        candidates = []
 
-        for zone in self.cluster_frontier_cells(frontier_cells, start):
+        for zone in self.cluster_frontier_cells(frontier_cells):
             if len(zone) < self._minimum_frontier_size_cells:
                 continue
 
             goal = self._representative_cell(zone)
-            distance_m = math.hypot(
+            goal_distance_m = math.hypot(
                 goal[0] - start[0],
                 goal[1] - start[1],
             ) * known_costmap.resolution_m
-            if distance_m < self._minimum_frontier_distance_m:
+            if goal_distance_m < self._minimum_frontier_distance_m:
                 continue
 
+            zone_distance_cells = min(
+                math.hypot(cell[0] - start[0], cell[1] - start[1])
+                for cell in zone
+            )
+            candidates.append((zone_distance_cells, goal, zone))
+
+        candidates.sort(
+            key=lambda candidate: (
+                candidate[0],
+                -len(candidate[2]),
+                candidate[1],
+            )
+        )
+
+        for _, goal, zone in candidates:
             result = self._path_planner.plan(
                 costmap=known_costmap,
                 start=start,
@@ -94,7 +105,7 @@ class FrontierPlanner:
             score = result.total_cost / (
                 len(zone) ** self._frontier_size_weight
             )
-            candidate = ExplorationPlan(
+            return ExplorationPlan(
                 path=list(result.path),
                 goal=goal,
                 goal_yaw_grid_rad=self._unknown_direction(
@@ -105,36 +116,30 @@ class FrontierPlanner:
                 travel_cost=result.total_cost,
                 score=score,
             )
-            if self._is_better(candidate, best_plan):
-                best_plan = candidate
 
-        return best_plan
+        return None
 
     @classmethod
     def find_frontier_cells(cls, costmap: Costmap2d) -> set[GridCell]:
-        frontiers: set[GridCell] = set()
+        values = costmap.values
+        unknown = values == UNKNOWN
+        known_traversable = (values != UNKNOWN) & (values < OBSTACLE)
+        adjacent_to_unknown = np.zeros(values.shape, dtype=bool)
 
-        for y in range(costmap.height):
-            for x in range(costmap.width):
-                if not costmap.is_traversable(x, y):
-                    continue
-                if int(costmap.values[y, x]) == UNKNOWN:
-                    continue
+        adjacent_to_unknown[1:, :] |= unknown[:-1, :]
+        adjacent_to_unknown[:-1, :] |= unknown[1:, :]
+        adjacent_to_unknown[:, 1:] |= unknown[:, :-1]
+        adjacent_to_unknown[:, :-1] |= unknown[:, 1:]
 
-                if any(
-                    costmap.in_bounds(x + dx, y + dy)
-                    and int(costmap.values[y + dy, x + dx]) == UNKNOWN
-                    for dx, dy in cls._CARDINAL_NEIGHBORS
-                ):
-                    frontiers.add((x, y))
-
-        return frontiers
+        frontier_y, frontier_x = np.nonzero(
+            known_traversable & adjacent_to_unknown
+        )
+        return set(zip(frontier_x.tolist(), frontier_y.tolist()))
 
     @classmethod
     def cluster_frontier_cells(
         cls,
         frontier_cells: set[GridCell],
-        start: GridCell
     ) -> list[tuple[GridCell, ...]]:
         unvisited = set(frontier_cells)
         zones: list[tuple[GridCell, ...]] = []
@@ -159,16 +164,7 @@ class FrontierPlanner:
 
             zones.append(tuple(sorted(zone)))
 
-        cloest_zone = zones[0]
-        min_dist = math.inf
-        for zone in zones:
-            zgc = zone[0]
-            dist = math.sqrt((zgc[0] - start[0])**2  + (zgc[1] - start[1])**2)
-            if dist < min_dist:
-                min_dist = dist
-                cloest_zone = zone
-
-        return [cloest_zone]
+        return zones
 
     @staticmethod
     def _representative_cell(zone: tuple[GridCell, ...]) -> GridCell:
@@ -204,25 +200,3 @@ class FrontierPlanner:
             direction_x, direction_y = directions[0]
 
         return math.atan2(direction_y, direction_x)
-
-    @staticmethod
-    def _is_better(
-        candidate: ExplorationPlan,
-        current: Optional[ExplorationPlan],
-    ) -> bool:
-        if current is None:
-            return True
-
-        candidate_key = (
-            candidate.score,
-            candidate.travel_cost,
-            -candidate.frontier_size,
-            candidate.goal,
-        )
-        current_key = (
-            current.score,
-            current.travel_cost,
-            -current.frontier_size,
-            current.goal,
-        )
-        return candidate_key < current_key
