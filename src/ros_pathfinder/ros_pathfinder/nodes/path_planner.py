@@ -30,6 +30,7 @@ from ros_pathfinder.planning.exploration import (
 from ros_pathfinder.planning.grid_geometry import GridGeometry2d
 from ros_pathfinder.planning.path_simplification import simplify_grid_path
 from ros_pathfinder.planning.path_validation import validate_remaining_path
+from ros_pathfinder.planning.start_projection import nearest_traversable_cell
 
 
 class PathPlannerNode(Node):
@@ -63,6 +64,16 @@ class PathPlannerNode(Node):
         self._exploration_goal_pause_s = float(
             self.get_parameter("exploration_goal_pause_s").value
         )
+        self._maximum_start_projection_distance_m = float(
+            self.get_parameter(
+                "maximum_start_projection_distance_m"
+            ).value
+        )
+        self._exploration_completion_confirmations = int(
+            self.get_parameter(
+                "exploration_completion_confirmations"
+            ).value
+        )
         if not self._base_frame:
             raise ValueError("base_frame cannot be empty")
         if self._planning_mode not in {"goal", "explore"}:
@@ -77,6 +88,18 @@ class PathPlannerNode(Node):
             )
         if self._exploration_goal_pause_s < 0.0:
             raise ValueError("exploration_goal_pause_s cannot be negative")
+        if (
+            not math.isfinite(self._maximum_start_projection_distance_m)
+            or self._maximum_start_projection_distance_m < 0.0
+        ):
+            raise ValueError(
+                "maximum_start_projection_distance_m must be finite and "
+                "non-negative"
+            )
+        if self._exploration_completion_confirmations <= 0:
+            raise ValueError(
+                "exploration_completion_confirmations must be positive"
+            )
         self._costmap_config = CostmapConfig(
             robot_radius_m=float(
                 self.get_parameter("robot_radius_m").value
@@ -142,6 +165,10 @@ class PathPlannerNode(Node):
         self._goal: Optional[PoseStamped] = None
         self._plan_requested = self._planning_mode == "explore"
         self._exploration_complete = False
+        self._frontier_miss_observations = 0
+        self._last_frontier_miss_map_sequence: Optional[int] = None
+        self._map_sequence = 0
+        self._last_start_cell_warning_ns = 0
         self._earliest_replan_ns = 0
 
         # goal comes from rviz goal pose
@@ -207,6 +234,8 @@ class PathPlannerNode(Node):
         self.declare_parameter("minimum_frontier_distance_m", 0.30)
         self.declare_parameter("frontier_size_weight", 1.0)
         self.declare_parameter("exploration_goal_pause_s", 0.75)
+        self.declare_parameter("maximum_start_projection_distance_m", 0.50)
+        self.declare_parameter("exploration_completion_confirmations", 3)
 
     def map_callback(self, map_msg: OccupancyGrid) -> None:
         expected_size = map_msg.info.width * map_msg.info.height
@@ -238,6 +267,7 @@ class PathPlannerNode(Node):
             return
 
         self._map_frame = map_msg.header.frame_id or "map"
+        self._map_sequence += 1
 
         costmap_msg = OccupancyGrid()
         costmap_msg.header.frame_id = map_msg.header.frame_id
@@ -306,38 +336,51 @@ class PathPlannerNode(Node):
             )
             return
 
-        start = self._grid_geometry.world_to_cell(
+        requested_start = self._grid_geometry.world_to_cell(
             map_to_base.transform.translation.x,
             map_to_base.transform.translation.y,
         )
 
-        if start is None:
+        if requested_start is None:
             self.get_logger().warning("robot pose is outside the costmap")
             self._finish_failed_plan()
             return
 
+        planning_costmap = self._costmap
+        if self._planning_mode == "explore":
+            planning_costmap = self._costmap.with_allow_unknown(False)
+
+        start = nearest_traversable_cell(
+            costmap=planning_costmap,
+            start=requested_start,
+            maximum_distance_m=self._maximum_start_projection_distance_m,
+        )
+        if start is None:
+            self._reset_frontier_miss_observations()
+            self._log_unavailable_start_cell(requested_start)
+            return
+        if start != requested_start:
+            self._log_projected_start_cell(requested_start, start)
+
         if self._planning_mode == "explore":
             selection_started = time.perf_counter()
             exploration_plan = self._frontier_planner.plan(
-                costmap=self._costmap,
+                costmap=planning_costmap,
                 start=start,
             )
             selection_time_ms = (
                 time.perf_counter() - selection_started
             ) * 1000.0
             if exploration_plan is None:
-                self.get_logger().info(
-                    "frontier selection found no goal "
-                    f"in {selection_time_ms:.1f} ms"
-                )
-                self._finish_exploration()
+                self._handle_missing_frontier(selection_time_ms)
                 return
 
             self._goal_generation += 1
             self._goal = self._exploration_goal_pose(exploration_plan)
             self._exploration_complete = False
+            self._reset_frontier_miss_observations()
             raw_path = list(exploration_plan.path)
-            path_costmap = self._costmap.with_allow_unknown(False)
+            path_costmap = planning_costmap
             self.get_logger().info(
                 "selected frontier "
                 f"cell={exploration_plan.goal} "
@@ -455,6 +498,61 @@ class PathPlannerNode(Node):
                 "exploration complete: no reachable frontiers remain"
             )
         self._exploration_complete = True
+
+    def _handle_missing_frontier(self, selection_time_ms: float) -> None:
+        if self._last_frontier_miss_map_sequence == self._map_sequence:
+            return
+
+        self._last_frontier_miss_map_sequence = self._map_sequence
+        self._frontier_miss_observations += 1
+
+        confirmations = self._exploration_completion_confirmations
+        self.get_logger().info(
+            "frontier selection found no reachable goal "
+            f"in {selection_time_ms:.1f} ms "
+            f"({self._frontier_miss_observations}/{confirmations} maps)"
+        )
+        if self._frontier_miss_observations >= confirmations:
+            self._finish_exploration()
+
+    def _reset_frontier_miss_observations(self) -> None:
+        self._frontier_miss_observations = 0
+        self._last_frontier_miss_map_sequence = None
+
+    def _log_unavailable_start_cell(self, start: tuple[int, int]) -> None:
+        now_ns = self.get_clock().now().nanoseconds
+        if now_ns - self._last_start_cell_warning_ns < 2_000_000_000:
+            return
+        self._last_start_cell_warning_ns = now_ns
+        value = int(self._costmap.values[start[1], start[0]])
+        self.get_logger().warning(
+            f"planning start cell {start} has cost {value} and no "
+            "traversable cell is within "
+            f"{self._maximum_start_projection_distance_m:.2f} m; "
+            "waiting for an updated map"
+        )
+
+    def _log_projected_start_cell(
+        self,
+        requested_start: tuple[int, int],
+        projected_start: tuple[int, int],
+    ) -> None:
+        now_ns = self.get_clock().now().nanoseconds
+        if now_ns - self._last_start_cell_warning_ns < 2_000_000_000:
+            return
+        self._last_start_cell_warning_ns = now_ns
+        value = int(
+            self._costmap.values[requested_start[1], requested_start[0]]
+        )
+        distance_m = math.hypot(
+            projected_start[0] - requested_start[0],
+            projected_start[1] - requested_start[1],
+        ) * self._costmap.resolution_m
+        self.get_logger().warning(
+            f"planning start cell {requested_start} has cost {value}; "
+            f"using nearby traversable cell {projected_start} "
+            f"{distance_m:.2f} m away"
+        )
 
     def _queue_path_for_following(self, path: Path) -> None:
         self._pending_follow_path = path
