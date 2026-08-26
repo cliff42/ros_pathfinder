@@ -33,6 +33,10 @@ from ros_pathfinder.following.path_tracking import (
     PathTrackingCommand,
     PathTrackingConfig,
 )
+from ros_pathfinder.following.collision_confirmation import (
+    CollisionConfirmation,
+    CollisionConfirmationConfig,
+)
 from ros_pathfinder.following.goal_settling import (
     GoalSettlingConfig,
     GoalSettlingMonitor,
@@ -59,6 +63,7 @@ class _ActiveGoal:
     started_time_ns: int
     last_transform_time_ns: int
     goal_settling_monitor: GoalSettlingMonitor
+    collision_confirmation: CollisionConfirmation
 
 
 # https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
@@ -85,6 +90,7 @@ class PathFollowerNode(Node):
         self._last_tracking_diagnostic_ns = 0
         self._latest_scan_points_base: Optional[np.ndarray] = None
         self._latest_scan_received_time_ns: Optional[int] = None
+        self._latest_scan_sequence = 0
         self._latest_linear_velocity_m_s = 0.0
         self._latest_angular_velocity_rad_s = 0.0
         self._latest_odom_yaw_rad = 0.0
@@ -192,6 +198,7 @@ class PathFollowerNode(Node):
         self.declare_parameter("collision_margin_m", 0.05)
         self.declare_parameter("collision_prediction_horizon_s", 1.5)
         self.declare_parameter("collision_prediction_step_s", 0.05)
+        self.declare_parameter("collision_confirmation_scans", 2)
 
     def _load_parameters(self) -> None:
         self._base_frame = str(self.get_parameter("base_frame").value)
@@ -314,6 +321,11 @@ class PathFollowerNode(Node):
                 self.get_parameter("collision_prediction_step_s").value
             ),
         )
+        self._collision_confirmation_config = CollisionConfirmationConfig(
+            required_consecutive_scans=int(
+                self.get_parameter("collision_confirmation_scans").value
+            )
+        )
 
     def _goal_callback(self, goal_request) -> GoalResponse:
         if (
@@ -373,6 +385,9 @@ class PathFollowerNode(Node):
             last_transform_time_ns=now_ns,
             goal_settling_monitor=GoalSettlingMonitor(
                 self._goal_settling_config
+            ),
+            collision_confirmation=CollisionConfirmation(
+                self._collision_confirmation_config
             ),
         )
 
@@ -699,6 +714,7 @@ class PathFollowerNode(Node):
             self._latest_scan_received_time_ns = (
                 self.get_clock().now().nanoseconds
             )
+            self._latest_scan_sequence += 1
 
     def _command_is_collision_safe(
         self,
@@ -714,6 +730,7 @@ class PathFollowerNode(Node):
         with self._state_lock:
             points = self._latest_scan_points_base
             scan_time_ns = self._latest_scan_received_time_ns
+            scan_sequence = self._latest_scan_sequence
 
         if scan_time_ns is None or points is None:
             self._publish_stop()
@@ -753,11 +770,48 @@ class PathFollowerNode(Node):
             )
             return False
 
+        previous_scan_sequence = (
+            active_goal.collision_confirmation.last_scan_sequence
+        )
+        previous_collision_scans = (
+            active_goal.collision_confirmation.consecutive_collision_scans
+        )
+        collision_confirmed = active_goal.collision_confirmation.update(
+            collision_detected=collision.collision_detected,
+            scan_sequence=scan_sequence,
+        )
+
         if not collision.collision_detected:
+            if (
+                scan_sequence != previous_scan_sequence
+                and previous_collision_scans > 0
+            ):
+                self.get_logger().info(
+                    "local obstacle candidate cleared; resuming path"
+                )
             return True
 
         point_x, point_y = collision.collision_point_base
         collision_time_s = collision.time_to_collision_s
+        self._publish_stop()
+        if not collision_confirmed:
+            if scan_sequence != previous_scan_sequence:
+                observation_count = (
+                    active_goal.collision_confirmation
+                    .consecutive_collision_scans
+                )
+                required_count = (
+                    self._collision_confirmation_config
+                    .required_consecutive_scans
+                )
+                self.get_logger().warning(
+                    "possible local obstacle at "
+                    f"({point_x:.2f}, {point_y:.2f}) m in base_link; "
+                    "stopped pending confirmation "
+                    f"({observation_count}/{required_count} scans)"
+                )
+            return False
+
         if goal_position_reached:
             error_code = FollowPath.Result.FAILED_TO_MAKE_PROGRESS
             message = (
