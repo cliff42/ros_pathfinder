@@ -195,7 +195,7 @@ class PathFollowerNode(Node):
         self.declare_parameter("footprint_min_y_m", -0.30)
         self.declare_parameter("footprint_max_y_m", 0.30)
         self.declare_parameter("self_filter_padding_m", 0.02)
-        self.declare_parameter("collision_margin_m", 0.05)
+        self.declare_parameter("collision_margin_m", 0.02)
         self.declare_parameter("collision_prediction_horizon_s", 1.5)
         self.declare_parameter("collision_prediction_step_s", 0.05)
         self.declare_parameter("collision_confirmation_scans", 2)

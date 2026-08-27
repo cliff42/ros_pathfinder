@@ -4,6 +4,8 @@ from typing import Optional
 
 import numpy as np
 
+from ros_pathfinder.geometry.footprint import FootprintBox2d
+
 
 @dataclass
 class TrajectoryCollisionConfig:
@@ -11,7 +13,7 @@ class TrajectoryCollisionConfig:
     footprint_max_x_m: float = 0.50
     footprint_min_y_m: float = -0.30
     footprint_max_y_m: float = 0.30
-    collision_margin_m: float = 0.05
+    collision_margin_m: float = 0.02
     prediction_horizon_s: float = 1.5
     prediction_step_s: float = 0.05
     linear_velocity_epsilon_m_s: float = 0.005
@@ -61,6 +63,15 @@ class TrajectoryCollisionResult:
 class TrajectoryCollisionChecker:
     def __init__(self, config: TrajectoryCollisionConfig) -> None:
         self._config = config
+        self._physical_footprint = FootprintBox2d(
+            min_x_m=config.footprint_min_x_m,
+            max_x_m=config.footprint_max_x_m,
+            min_y_m=config.footprint_min_y_m,
+            max_y_m=config.footprint_max_y_m,
+        )
+        self._collision_footprint = self._physical_footprint.expanded(
+            config.collision_margin_m
+        )
 
     def check(
         self,
@@ -133,12 +144,7 @@ class TrajectoryCollisionChecker:
         self,
         points: np.ndarray,
     ) -> np.ndarray:
-        return (
-            (points[:, 0] >= self._config.footprint_min_x_m)
-            & (points[:, 0] <= self._config.footprint_max_x_m)
-            & (points[:, 1] >= self._config.footprint_min_y_m)
-            & (points[:, 1] <= self._config.footprint_max_y_m)
-        )
+        return self._physical_footprint.contains_points(points)
 
     def _points_inside_predicted_footprint(
         self,
@@ -154,13 +160,8 @@ class TrajectoryCollisionChecker:
 
         local_x = cos_yaw * dx + sin_yaw * dy
         local_y = -sin_yaw * dx + cos_yaw * dy
-        margin = self._config.collision_margin_m
-
-        return (
-            (local_x >= self._config.footprint_min_x_m - margin)
-            & (local_x <= self._config.footprint_max_x_m + margin)
-            & (local_y >= self._config.footprint_min_y_m - margin)
-            & (local_y <= self._config.footprint_max_y_m + margin)
+        return self._collision_footprint.contains_points(
+            np.column_stack((local_x, local_y))
         )
 
     @staticmethod

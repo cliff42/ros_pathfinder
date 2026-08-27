@@ -20,6 +20,7 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid, Path
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from ros_pathfinder.geometry.footprint import FootprintBox2d
 from ros_pathfinder.geometry.pose2d import Pose2d
 from ros_pathfinder.planning.a_star import AStarPlanner
 from ros_pathfinder.planning.costmap import Costmap2d, CostmapConfig
@@ -28,6 +29,10 @@ from ros_pathfinder.planning.exploration import (
     FrontierPlanner,
 )
 from ros_pathfinder.planning.grid_geometry import GridGeometry2d
+from ros_pathfinder.planning.footprint_path import (
+    FootprintPathChecker,
+    FootprintPathValidity,
+)
 from ros_pathfinder.planning.path_simplification import simplify_grid_path
 from ros_pathfinder.planning.path_validation import validate_remaining_path
 from ros_pathfinder.planning.start_projection import nearest_traversable_cell
@@ -100,13 +105,38 @@ class PathPlannerNode(Node):
             raise ValueError(
                 "exploration_completion_confirmations must be positive"
             )
+        self._physical_footprint = FootprintBox2d(
+            min_x_m=float(
+                self.get_parameter("footprint_min_x_m").value
+            ),
+            max_x_m=float(
+                self.get_parameter("footprint_max_x_m").value
+            ),
+            min_y_m=float(
+                self.get_parameter("footprint_min_y_m").value
+            ),
+            max_y_m=float(
+                self.get_parameter("footprint_max_y_m").value
+            ),
+        )
+        self._collision_margin_m = float(
+            self.get_parameter("collision_margin_m").value
+        )
+        if (
+            not math.isfinite(self._collision_margin_m)
+            or self._collision_margin_m < 0.0
+        ):
+            raise ValueError(
+                "collision_margin_m must be finite and non-negative"
+            )
+        self._collision_footprint = self._physical_footprint.expanded(
+            self._collision_margin_m
+        )
         self._costmap_config = CostmapConfig(
             robot_radius_m=float(
                 self.get_parameter("robot_radius_m").value
             ),
-            safety_margin_m=float(
-                self.get_parameter("safety_margin_m").value
-            ),
+            safety_margin_m=self._collision_margin_m,
             occupied_threshold=int(
                 self.get_parameter("occupied_threshold").value
             ),
@@ -116,6 +146,8 @@ class PathPlannerNode(Node):
             ),
         )
         self._costmap: Optional[Costmap2d] = None
+        self._obstacle_costmap: Optional[Costmap2d] = None
+        self._occupancy_values: Optional[np.ndarray] = None
         self._grid_geometry: Optional[GridGeometry2d] = None
 
         map_qos = QoSProfile(
@@ -220,8 +252,12 @@ class PathPlannerNode(Node):
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("base_frame", "base_link")
-        self.declare_parameter("robot_radius_m", 0.53)
-        self.declare_parameter("safety_margin_m", 0.05)
+        self.declare_parameter("robot_radius_m", 0.35)
+        self.declare_parameter("footprint_min_x_m", -0.15)
+        self.declare_parameter("footprint_max_x_m", 0.50)
+        self.declare_parameter("footprint_min_y_m", -0.30)
+        self.declare_parameter("footprint_max_y_m", 0.30)
+        self.declare_parameter("collision_margin_m", 0.02)
         self.declare_parameter("occupied_threshold", 65)
         self.declare_parameter("allow_unknown", False)
         self.declare_parameter("unknown_cost_multiplier", 3.0)
@@ -251,10 +287,26 @@ class PathPlannerNode(Node):
         ).reshape(map_msg.info.height, map_msg.info.width)
 
         try:
+            self._occupancy_values = occupancy_values.copy()
             self._costmap = Costmap2d.from_occupancy(
                 occupancy_values=occupancy_values,
                 resolution_m=map_msg.info.resolution,
                 config=self._costmap_config,
+            )
+            self._obstacle_costmap = Costmap2d.from_occupancy(
+                occupancy_values=occupancy_values,
+                resolution_m=map_msg.info.resolution,
+                config=CostmapConfig(
+                    robot_radius_m=0.0,
+                    safety_margin_m=0.0,
+                    occupied_threshold=(
+                        self._costmap_config.occupied_threshold
+                    ),
+                    allow_unknown=self._costmap_config.allow_unknown,
+                    unknown_cost_multiplier=(
+                        self._costmap_config.unknown_cost_multiplier
+                    ),
+                ),
             )
             self._grid_geometry = GridGeometry2d(
                 width=map_msg.info.width,
@@ -335,6 +387,10 @@ class PathPlannerNode(Node):
                 f"cannot obtain planning start pose: {error}"
             )
             return
+
+        start_pose_world = self._pose_from_transform(
+            map_to_base.transform
+        )
 
         requested_start = self._grid_geometry.world_to_cell(
             map_to_base.transform.translation.x,
@@ -422,6 +478,72 @@ class PathPlannerNode(Node):
             self._finish_failed_plan()
             return
 
+        try:
+            footprint_validity = self._check_path_footprint(
+                start_pose_world=start_pose_world,
+                cells=path,
+            )
+        except (RuntimeError, ValueError) as error:
+            self.get_logger().error(
+                f"cannot validate planned path footprint: {error}"
+            )
+            self._finish_failed_plan()
+            return
+        if not footprint_validity.is_valid:
+            collision_pose = footprint_validity.collision_pose
+            collision_pose_text = ""
+            if collision_pose is not None:
+                collision_pose_text = (
+                    f" near ({collision_pose.x_m:.2f}, "
+                    f"{collision_pose.y_m:.2f})"
+                )
+            self.get_logger().warning(
+                f"nominal path is unsafe for the configured footprint"
+                f"{collision_pose_text}: {footprint_validity.reason}; "
+                "retrying with conservative footprint clearance"
+            )
+
+            fallback_plan = self._plan_with_conservative_clearance(
+                requested_start=requested_start,
+            )
+            if fallback_plan is None:
+                self.get_logger().warning(
+                    "no path is available with full-footprint clearance"
+                )
+                self._finish_failed_plan()
+                return
+
+            raw_path, path_costmap = fallback_plan
+            try:
+                path = simplify_grid_path(path_costmap, raw_path)
+            except ValueError as error:
+                self.get_logger().error(
+                    f"conservative planner returned an invalid path: "
+                    f"{error}"
+                )
+                self._finish_failed_plan()
+                return
+
+            try:
+                footprint_validity = self._check_path_footprint(
+                    start_pose_world=start_pose_world,
+                    cells=path,
+                )
+            except (RuntimeError, ValueError) as error:
+                self.get_logger().error(
+                    "cannot validate conservative path footprint: "
+                    f"{error}"
+                )
+                self._finish_failed_plan()
+                return
+            if not footprint_validity.is_valid:
+                self.get_logger().warning(
+                    "conservative path still fails footprint validation: "
+                    f"{footprint_validity.reason}"
+                )
+                self._finish_failed_plan()
+                return
+
         path_msg = self._publish_path(path)
         self._plan_requested = False
         self._earliest_replan_ns = 0
@@ -429,6 +551,125 @@ class PathPlannerNode(Node):
         self.get_logger().info(
             f"published path with {len(path)} poses "
             f"({len(raw_path)} raw A* cells)"
+        )
+
+    def _plan_with_conservative_clearance(
+        self,
+        requested_start: tuple[int, int],
+    ) -> Optional[tuple[list[tuple[int, int]], Costmap2d]]:
+        if self._occupancy_values is None or self._grid_geometry is None:
+            return None
+
+        cell_half_diagonal_m = (
+            self._grid_geometry.resolution_m / math.sqrt(2.0)
+        )
+        clearance_radius_m = (
+            self._collision_footprint.circumscribed_radius_m
+            + cell_half_diagonal_m
+        )
+        allow_unknown = (
+            self._costmap_config.allow_unknown
+            if self._planning_mode == "goal"
+            else False
+        )
+        conservative_costmap = Costmap2d.from_occupancy(
+            occupancy_values=self._occupancy_values,
+            resolution_m=self._grid_geometry.resolution_m,
+            config=CostmapConfig(
+                robot_radius_m=clearance_radius_m,
+                safety_margin_m=0.0,
+                occupied_threshold=self._costmap_config.occupied_threshold,
+                allow_unknown=allow_unknown,
+                unknown_cost_multiplier=(
+                    self._costmap_config.unknown_cost_multiplier
+                ),
+            ),
+        )
+        start = nearest_traversable_cell(
+            costmap=conservative_costmap,
+            start=requested_start,
+            maximum_distance_m=self._maximum_start_projection_distance_m,
+        )
+        if start is None:
+            return None
+
+        if self._planning_mode == "explore":
+            exploration_plan = self._frontier_planner.plan(
+                costmap=conservative_costmap,
+                start=start,
+            )
+            if exploration_plan is None:
+                return None
+            self._goal = self._exploration_goal_pose(exploration_plan)
+            return list(exploration_plan.path), conservative_costmap
+
+        if self._goal is None:
+            return None
+        goal = self._grid_geometry.world_to_cell(
+            self._goal.pose.position.x,
+            self._goal.pose.position.y,
+        )
+        if goal is None:
+            return None
+        result = self._planner.plan(
+            costmap=conservative_costmap,
+            start=start,
+            goal=goal,
+        )
+        if result is None or not result.path:
+            return None
+        return list(result.path), conservative_costmap
+
+    def _check_path_footprint(
+        self,
+        start_pose_world: Pose2d,
+        cells: list[tuple[int, int]],
+    ) -> FootprintPathValidity:
+        if (
+            self._obstacle_costmap is None
+            or self._grid_geometry is None
+            or self._goal is None
+        ):
+            raise RuntimeError("footprint path checking is not initialized")
+        world_points = np.asarray(
+            [
+                self._grid_geometry.cell_center_in_world(cell)
+                for cell in cells
+            ],
+            dtype=float,
+        )
+        final_yaw_rad = self._pose_from_ros_pose(
+            self._goal.pose
+        ).yaw_rad
+        return self._check_world_path_footprint(
+            start_pose_world=start_pose_world,
+            path_points_world=world_points,
+            final_yaw_rad=final_yaw_rad,
+            allow_unknown=True,
+        )
+
+    def _check_world_path_footprint(
+        self,
+        start_pose_world: Pose2d,
+        path_points_world: np.ndarray,
+        final_yaw_rad: float,
+        allow_unknown: bool,
+    ) -> FootprintPathValidity:
+        if self._obstacle_costmap is None or self._grid_geometry is None:
+            raise RuntimeError("footprint path checking is not initialized")
+
+        obstacle_costmap = self._obstacle_costmap.with_allow_unknown(
+            allow_unknown
+        )
+        checker = FootprintPathChecker(
+            obstacle_costmap=obstacle_costmap,
+            grid_geometry=self._grid_geometry,
+            collision_footprint=self._collision_footprint,
+        )
+        return checker.check(
+            start_pose_world=start_pose_world,
+            path_points_world=path_points_world,
+            final_yaw_rad=final_yaw_rad,
         )
 
     def _publish_path(
@@ -731,6 +972,9 @@ class PathPlannerNode(Node):
 
         robot_x = map_to_base.transform.translation.x
         robot_y = map_to_base.transform.translation.y
+        robot_pose_world = self._pose_from_transform(
+            map_to_base.transform
+        )
         if self._goal_position_reached(robot_x, robot_y):
             self._blocked_path_observations = 0
             return
@@ -759,7 +1003,31 @@ class PathPlannerNode(Node):
 
         self._current_waypoint_index = validity.current_waypoint_index
 
-        if validity.is_valid:
+        path_is_valid = validity.is_valid
+        invalid_reason = validity.reason
+        if path_is_valid:
+            remaining_points = points[self._current_waypoint_index:]
+            if len(remaining_points) == 0:
+                remaining_points = points[-1:]
+            final_yaw_rad = self._pose_from_ros_pose(
+                self._active_follow_path.poses[-1].pose
+            ).yaw_rad
+            try:
+                footprint_validity = self._check_world_path_footprint(
+                    start_pose_world=robot_pose_world,
+                    path_points_world=remaining_points,
+                    final_yaw_rad=final_yaw_rad,
+                    allow_unknown=True,
+                )
+            except (RuntimeError, ValueError) as error:
+                self.get_logger().error(
+                    f"cannot validate active path footprint: {error}"
+                )
+                return
+            path_is_valid = footprint_validity.is_valid
+            invalid_reason = footprint_validity.reason
+
+        if path_is_valid:
             self._blocked_path_observations = 0
             return
 
@@ -767,13 +1035,13 @@ class PathPlannerNode(Node):
         self.get_logger().warning(
             f"active path appears blocked "
             f"({self._blocked_path_observations}/"
-            f"{self._blocked_path_confirmations}): {validity.reason}"
+            f"{self._blocked_path_confirmations}): {invalid_reason}"
         )
         if self._blocked_path_observations < self._blocked_path_confirmations:
             return
 
         self._blocked_path_observations = 0
-        self._request_replan(validity.reason)
+        self._request_replan(invalid_reason)
 
     def _goal_position_reached(
         self,
@@ -863,6 +1131,25 @@ class PathPlannerNode(Node):
             self.get_logger().warning(
                 "path follower did not accept the cancel request"
             )
+
+    @staticmethod
+    def _pose_from_transform(transform) -> Pose2d:
+        rotation = transform.rotation
+        yaw = math.atan2(
+            2.0 * (
+                rotation.w * rotation.z
+                + rotation.x * rotation.y
+            ),
+            1.0 - 2.0 * (
+                rotation.y * rotation.y
+                + rotation.z * rotation.z
+            ),
+        )
+        return Pose2d(
+            x_m=transform.translation.x,
+            y_m=transform.translation.y,
+            yaw_rad=yaw,
+        )
 
     @staticmethod
     def _pose_from_ros_pose(pose) -> Pose2d:
