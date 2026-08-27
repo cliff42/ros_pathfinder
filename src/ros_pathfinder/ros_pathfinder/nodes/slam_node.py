@@ -307,10 +307,6 @@ class SlamNode(Node):
             current_odom_pose=odom_pose,
             timestamp_ns=self._timestamp_to_ns(msg.header.stamp)
         )
-        self._log_localization_diagnostic(
-            localization_update,
-            odom_pose,
-        )
 
         if localization_update.created_keyframe is not None:
             self._occupancy_grid.integrate_keyframe(
@@ -353,59 +349,6 @@ class SlamNode(Node):
         transform.transform.rotation.w = math.cos(half_yaw)
 
         self.transform_broadcaster.sendTransform(transform)
-
-    def _log_localization_diagnostic(
-        self,
-        update: LocalizationUpdate,
-        odom_pose: Pose2d,
-    ) -> None:
-        if not self._diagnostic_logging_enabled:
-            return
-
-        now_ns = self.get_clock().now().nanoseconds
-        period_ns = int(self._diagnostic_log_period_s * 1e9)
-        correction = update.icp_correction
-        significant_correction = (
-            correction is not None
-            and (
-                math.hypot(correction.x_m, correction.y_m) >= 0.03
-                or abs(correction.yaw_rad) >= math.radians(2.0)
-            )
-        )
-        if (
-            not significant_correction
-            and now_ns - self._last_localization_diagnostic_ns < period_ns
-        ):
-            return
-        self._last_localization_diagnostic_ns = now_ns
-
-        icp_result = update.icp_result
-        if icp_result is None:
-            icp_quality = "icp=none"
-            icp_pose = "none"
-        else:
-            icp_quality = (
-                f"matches={icp_result.match_count} "
-                f"rmse={icp_result.rmse_m:.4f}m "
-                f"iterations={icp_result.iterations} "
-                f"converged={icp_result.converged}"
-            )
-            icp_pose = self._pose_diagnostic_text(icp_result.delta)
-
-        self.get_logger().info(
-            "slam_diag "
-            f"status={update.status.value} "
-            f"odom={self._pose_diagnostic_text(odom_pose)} "
-            f"initial_guess="
-            f"{self._pose_diagnostic_text(update.icp_initial_transform)} "
-            f"icp_result={icp_pose} "
-            f"icp_correction="
-            f"{self._pose_diagnostic_text(update.icp_correction)} "
-            f"chosen_delta={self._pose_diagnostic_text(update.chosen_delta)} "
-            f"map_to_odom={self._pose_diagnostic_text(update.map_to_odom)} "
-            f"map_to_base={self._pose_diagnostic_text(update.map_to_base)} "
-            f"{icp_quality}"
-        )
 
     @staticmethod
     def _pose_diagnostic_text(pose: Optional[Pose2d]) -> str:
