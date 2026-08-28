@@ -111,16 +111,16 @@ class SlamNode(Node):
             )
         physical_footprint = FootprintBox2d(
             min_x_m=float(
-                self.declare_parameter("footprint_min_x_m", -0.15).value
+                self.declare_parameter("footprint_min_x_m", -0.127).value
             ),
             max_x_m=float(
-                self.declare_parameter("footprint_max_x_m", 0.50).value
+                self.declare_parameter("footprint_max_x_m", 0.477).value
             ),
             min_y_m=float(
-                self.declare_parameter("footprint_min_y_m", -0.30).value
+                self.declare_parameter("footprint_min_y_m", -0.2655).value
             ),
             max_y_m=float(
-                self.declare_parameter("footprint_max_y_m", 0.30).value
+                self.declare_parameter("footprint_max_y_m", 0.2655).value
             ),
         )
         self._filter_footprint = physical_footprint.expanded(

@@ -9,12 +9,12 @@ from ros_pathfinder.geometry.footprint import FootprintBox2d
 
 @dataclass
 class TrajectoryCollisionConfig:
-    footprint_min_x_m: float = -0.15
-    footprint_max_x_m: float = 0.50
-    footprint_min_y_m: float = -0.30
-    footprint_max_y_m: float = 0.30
+    footprint_min_x_m: float = -0.127
+    footprint_max_x_m: float = 0.477
+    footprint_min_y_m: float = -0.2655
+    footprint_max_y_m: float = 0.2655
     collision_margin_m: float = 0.02
-    prediction_horizon_s: float = 1.5
+    prediction_horizon_s: float = 0.40
     prediction_step_s: float = 0.05
     linear_velocity_epsilon_m_s: float = 0.005
     angular_velocity_epsilon_rad_s: float = 0.01

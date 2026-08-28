@@ -1,11 +1,9 @@
 /**:
   ros__parameters:
-    # Shared physical footprint in base_link. The launch file passes this
-    # configuration to SLAM, the planner, and the follower.
-    footprint_min_x_m: -0.15
-    footprint_max_x_m: 0.50
-    footprint_min_y_m: -0.30
-    footprint_max_y_m: 0.30
+    footprint_min_x_m: -0.127
+    footprint_max_x_m: 0.477
+    footprint_min_y_m: -0.2655
+    footprint_max_y_m: 0.2655
     collision_margin_m: 0.02
 
 slam_node:
@@ -63,6 +61,6 @@ path_follower:
     collision_monitor_enabled: true
     scan_timeout_s: 0.5
     self_filter_padding_m: 0.02
-    collision_prediction_horizon_s: 0.75
+    collision_prediction_horizon_s: 0.40
     collision_prediction_step_s: 0.05
     collision_confirmation_scans: 2
