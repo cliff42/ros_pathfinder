@@ -90,7 +90,8 @@ class FrontierPlanner:
                 candidate[0],
                 -len(candidate[2]),
                 candidate[1],
-            )
+            ),
+            reverse=True,
         )
 
         for _, goal, zone in candidates:
