@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ros_pathfinder.localization.keyframe import Keyframe
 from ros_pathfinder.geometry.pose2d import Pose2d
+from ros_pathfinder.geometry.scan2d import ScanObservation2d
 
 
 @dataclass
@@ -39,9 +39,11 @@ class OccupancyGrid2d:
         self._free_threshold = self._probability_to_log_odds(config.free_probability_threshold)
         self._occupied_threshold = self._probability_to_log_odds(config.occupied_probability_threshold)
 
-    def integrate_keyframe(self, keyframe: Keyframe, map_to_base: Pose2d) -> None:
-        scan = keyframe.scan
-
+    def integrate_scan(
+        self,
+        scan: ScanObservation2d,
+        map_to_base: Pose2d,
+    ) -> None:
         origin_map = map_to_base.transform_points(scan.sensor_origin_base.reshape(1, 2))[0]
 
         endpoints_map = map_to_base.transform_points(scan.ray_endpoints_base)

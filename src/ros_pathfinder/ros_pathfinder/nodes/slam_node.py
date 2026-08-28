@@ -29,6 +29,7 @@ from tf2_ros import (
 from ros_pathfinder.localization.icp_scan_matcher import ICPScanMatcher
 from ros_pathfinder.localization.scan_localization import (
     LocalizationUpdate,
+    LocalizationStatus,
     ScanLocalization,
     ScanLocalizationConfig,
 )
@@ -312,10 +313,14 @@ class SlamNode(Node):
             odom_pose,
         )
 
-        if localization_update.created_keyframe is not None:
-            self._occupancy_grid.integrate_keyframe(
-                keyframe=localization_update.created_keyframe,
-                map_to_base=localization_update.map_to_base
+        if localization_update.status in {
+            LocalizationStatus.INITIALIZED,
+            LocalizationStatus.STATIONARY,
+            LocalizationStatus.ICP_ACCEPTED,
+        }:
+            self._occupancy_grid.integrate_scan(
+                scan=scan_observation,
+                map_to_base=localization_update.map_to_base,
             )
 
         with self._map_to_odom_lock:
