@@ -64,6 +64,8 @@ class _ActiveGoal:
     last_transform_time_ns: int
     goal_settling_monitor: GoalSettlingMonitor
     collision_confirmation: CollisionConfirmation
+    collision_started_time_ns: Optional[int]
+    last_collision_wait_log_ns: int
 
 
 # https://wiki.purduesigbots.com/software/control-algorithms/basic-pure-pursuit
@@ -199,6 +201,7 @@ class PathFollowerNode(Node):
         self.declare_parameter("collision_prediction_horizon_s", 0.40)
         self.declare_parameter("collision_prediction_step_s", 0.05)
         self.declare_parameter("collision_confirmation_scans", 2)
+        self.declare_parameter("collision_wait_timeout_s", 2.0)
 
     def _load_parameters(self) -> None:
         self._base_frame = str(self.get_parameter("base_frame").value)
@@ -326,6 +329,16 @@ class PathFollowerNode(Node):
                 self.get_parameter("collision_confirmation_scans").value
             )
         )
+        self._collision_wait_timeout_s = float(
+            self.get_parameter("collision_wait_timeout_s").value
+        )
+        if (
+            not math.isfinite(self._collision_wait_timeout_s)
+            or self._collision_wait_timeout_s < 0.0
+        ):
+            raise ValueError(
+                "collision_wait_timeout_s must be finite and non-negative"
+            )
 
     def _goal_callback(self, goal_request) -> GoalResponse:
         if (
@@ -389,6 +402,8 @@ class PathFollowerNode(Node):
             collision_confirmation=CollisionConfirmation(
                 self._collision_confirmation_config
             ),
+            collision_started_time_ns=None,
+            last_collision_wait_log_ns=0,
         )
 
         with self._state_lock:
@@ -786,13 +801,23 @@ class PathFollowerNode(Node):
                 scan_sequence != previous_scan_sequence
                 and previous_collision_scans > 0
             ):
+                wait_duration_s = 0.0
+                if active_goal.collision_started_time_ns is not None:
+                    wait_duration_s = (
+                        now_ns - active_goal.collision_started_time_ns
+                    ) / 1e9
                 self.get_logger().info(
-                    "local obstacle candidate cleared; resuming path"
+                    "local obstacle cleared after "
+                    f"{wait_duration_s:.2f} s; resuming path"
                 )
+            active_goal.collision_started_time_ns = None
+            active_goal.last_collision_wait_log_ns = 0
             return True
 
         point_x, point_y = collision.collision_point_base
         collision_time_s = collision.time_to_collision_s
+        if active_goal.collision_started_time_ns is None:
+            active_goal.collision_started_time_ns = now_ns
         self._publish_stop()
         if not collision_confirmed:
             if scan_sequence != previous_scan_sequence:
@@ -810,6 +835,24 @@ class PathFollowerNode(Node):
                     "stopped pending confirmation "
                     f"({observation_count}/{required_count} scans)"
                 )
+            return False
+
+        wait_duration_s = (
+            now_ns - active_goal.collision_started_time_ns
+        ) / 1e9
+        if wait_duration_s < self._collision_wait_timeout_s:
+            if (
+                now_ns - active_goal.last_collision_wait_log_ns
+                >= 1_000_000_000
+            ):
+                self.get_logger().warning(
+                    "confirmed local obstacle at "
+                    f"({point_x:.2f}, {point_y:.2f}) m in base_link; "
+                    f"waiting for it to clear "
+                    f"({wait_duration_s:.2f}/"
+                    f"{self._collision_wait_timeout_s:.2f} s)"
+                )
+                active_goal.last_collision_wait_log_ns = now_ns
             return False
 
         if goal_position_reached:

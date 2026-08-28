@@ -202,6 +202,7 @@ class PathPlannerNode(Node):
         self._map_sequence = 0
         self._last_start_cell_warning_ns = 0
         self._earliest_replan_ns = 0
+        self._retry_plan_on_failure = False
 
         # goal comes from rviz goal pose
         self._goal_subscription = self.create_subscription(
@@ -346,6 +347,7 @@ class PathPlannerNode(Node):
         self._goal = msg
         self._plan_requested = True
         self._earliest_replan_ns = 0
+        self._retry_plan_on_failure = False
         self._pending_follow_path = None
         self._pending_follow_generation = None
         self._follow_stop_requested = True
@@ -547,6 +549,7 @@ class PathPlannerNode(Node):
         path_msg = self._publish_path(path)
         self._plan_requested = False
         self._earliest_replan_ns = 0
+        self._retry_plan_on_failure = False
         self._queue_path_for_following(path_msg)
         self.get_logger().info(
             f"published path with {len(path)} poses "
@@ -725,13 +728,28 @@ class PathPlannerNode(Node):
         self._cancel_active_following()
 
     def _finish_failed_plan(self) -> None:
+        if self._retry_plan_on_failure and self._goal is not None:
+            self._plan_requested = True
+            self._earliest_replan_ns = (
+                self.get_clock().now().nanoseconds
+                + int(self._replan_cooldown_s * 1e9)
+            )
+            self._publish_empty_path()
+            self.get_logger().warning(
+                "planning is still unavailable; waiting for an updated "
+                "map before retrying"
+            )
+            return
+
         self._plan_requested = False
         self._earliest_replan_ns = 0
+        self._retry_plan_on_failure = False
         self._publish_empty_path()
 
     def _finish_exploration(self) -> None:
         self._plan_requested = False
         self._earliest_replan_ns = 0
+        self._retry_plan_on_failure = False
         self._goal = None
         self._publish_empty_path()
         if not self._exploration_complete:
@@ -1061,6 +1079,7 @@ class PathPlannerNode(Node):
     def _request_replan(self, reason: str, delay_s: float = 0.0) -> None:
         if self._goal is None:
             return
+        self._retry_plan_on_failure = True
         if self._plan_requested:
             return
 

@@ -17,9 +17,7 @@ slam_node:
 path_planner:
   ros__parameters:
     base_frame: base_link
-    # Nominal center clearance used for the fast first planning pass. Every
-    # resulting path is also checked with the shared full footprint above.
-    robot_radius_m: 0.35
+    robot_radius_m: 0.35 # for first planning pass
     occupied_threshold: 65
     allow_unknown: true
     unknown_cost_multiplier: 3.0
@@ -64,3 +62,4 @@ path_follower:
     collision_prediction_horizon_s: 0.40
     collision_prediction_step_s: 0.05
     collision_confirmation_scans: 2
+    collision_wait_timeout_s: 5.0
