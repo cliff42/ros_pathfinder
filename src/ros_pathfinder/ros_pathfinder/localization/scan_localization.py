@@ -1,16 +1,19 @@
 import math
+import time
 
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-import numpy as np
-
 from ros_pathfinder.geometry.pose2d import Pose2d
 from ros_pathfinder.geometry.scan2d import ScanObservation2d
-from ros_pathfinder.localization.icp_scan_matcher import ICPResult, ICPScanMatcher
+from ros_pathfinder.localization.icp_scan_matcher import (
+    ICPResult,
+    ICPScanMatcher,
+)
 from ros_pathfinder.localization.keyframe import Keyframe
 from ros_pathfinder.localization.local_submap import LocalSubmap
+
 
 class LocalizationStatus(Enum):
     INITIALIZED = "initialized"
@@ -21,6 +24,7 @@ class LocalizationStatus(Enum):
     HIGH_RMSE = "high_rmse"
     LOW_INLIER_RATIO = "low_inlier_ratio"
     ODOM_DISAGREEMENT = "odom_disagreement"
+
 
 @dataclass
 class ScanLocalizationConfig:
@@ -35,6 +39,7 @@ class ScanLocalizationConfig:
     submap_max_keyframes: int
     submap_grid_size_m: float
 
+
 @dataclass
 class LocalizationUpdate:
     map_to_odom: Pose2d
@@ -44,11 +49,15 @@ class LocalizationUpdate:
     icp_result: Optional[ICPResult]
     icp_initial_transform: Optional[Pose2d]
     icp_correction: Optional[Pose2d]
+    icp_processing_time_ms: Optional[float]
     created_keyframe: Optional[Keyframe]
     completed_submap: Optional[LocalSubmap]
 
+
 class ScanLocalization:
-    def __init__(self, icp_scan_matcher: ICPScanMatcher, config: ScanLocalizationConfig) -> None:
+    def __init__(
+        self, icp_scan_matcher: ICPScanMatcher, config: ScanLocalizationConfig
+    ) -> None:
         self._icp_scan_matcher = icp_scan_matcher
         self._config = config
 
@@ -64,14 +73,17 @@ class ScanLocalization:
 
         self._last_match_odom_pose: Optional[Pose2d] = None
 
-    def update(self, current_scan: ScanObservation2d, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
+    def update(
+        self,
+        current_scan: ScanObservation2d,
+        current_odom_pose: Pose2d,
+        timestamp_ns: int,
+    ) -> LocalizationUpdate:
         current_points_base = current_scan.hit_points_base
 
         if self._active_submap is None:
             return self._initialize(
-                current_scan,
-                current_odom_pose,
-                timestamp_ns
+                current_scan, current_odom_pose, timestamp_ns
             )
 
         prev_map_to_base = self._map_to_base
@@ -81,6 +93,7 @@ class ScanLocalization:
         icp_result: Optional[ICPResult] = None
         icp_initial_transform: Optional[Pose2d] = None
         icp_correction: Optional[Pose2d] = None
+        icp_processing_time_ms: Optional[float] = None
         created_keyframe: Optional[Keyframe] = None
         completed_submap: Optional[LocalSubmap] = None
 
@@ -88,55 +101,70 @@ class ScanLocalization:
             status = LocalizationStatus.STATIONARY
             map_to_base = self._map_to_odom.compose(current_odom_pose)
         else:
-            submap_origin_odom_pose = self._active_submap.get_origin_keyframe().odom_pose
-            submap_to_base_guess = submap_origin_odom_pose.between(current_odom_pose)
+            submap_origin_odom_pose = (
+                self._active_submap.get_origin_keyframe().odom_pose
+            )
+            submap_to_base_guess = submap_origin_odom_pose.between(
+                current_odom_pose
+            )
             icp_initial_transform = submap_to_base_guess
 
             self._last_match_odom_pose = Pose2d(
-                x_m=current_odom_pose.x_m, 
+                x_m=current_odom_pose.x_m,
                 y_m=current_odom_pose.y_m,
-                yaw_rad=current_odom_pose.yaw_rad
+                yaw_rad=current_odom_pose.yaw_rad,
             )
 
+            icp_started_ns = time.perf_counter_ns()
             icp_result = self._icp_scan_matcher.match(
                 current_points_base=current_points_base,
                 previous_points_base=self._active_submap.get_points(),
-                initial_transform=submap_to_base_guess
+                initial_transform=submap_to_base_guess,
             )
+            icp_processing_time_ms = (
+                time.perf_counter_ns() - icp_started_ns
+            ) * 1e-6
 
             if icp_result is not None:
-                icp_correction = submap_to_base_guess.between(
-                    icp_result.delta
-                )
+                icp_correction = submap_to_base_guess.between(icp_result.delta)
 
             status = self._evaluate_match(
                 result=icp_result,
                 odom_delta=submap_to_base_guess,
-                current_point_count=current_points_base.shape[0]
+                current_point_count=current_points_base.shape[0],
             )
 
-            # TODO: eventually instead of just accepting ICP or odom, we want to fuse both with their covariance matricies
+            # TODO: Fuse ICP and odometry using their covariance matrices
+            # instead of selecting one result.
             if status is LocalizationStatus.ICP_ACCEPTED:
                 map_to_base = self._map_to_submap.compose(icp_result.delta)
             else:
                 map_to_base = self._map_to_odom.compose(current_odom_pose)
 
         chosen_delta = prev_map_to_base.between(map_to_base)
-        
+
         self._map_to_base = map_to_base
         self._map_to_odom = map_to_base.compose(current_odom_pose.inverse())
 
         if status is LocalizationStatus.ICP_ACCEPTED:
-            last_keyframe_to_current = self._active_submap.get_last_keyframe_pose().between(icp_result.delta)
+            last_keyframe_to_current = (
+                self._active_submap.get_last_keyframe_pose().between(
+                    icp_result.delta
+                )
+            )
 
-            if self._should_create_keyframe(relative_pose=last_keyframe_to_current, status=status):
+            if self._should_create_keyframe(
+                relative_pose=last_keyframe_to_current, status=status
+            ):
                 created_keyframe = self._create_keyframe(
                     scan=current_scan,
                     odom_pose=current_odom_pose,
-                    timestamp_ns=timestamp_ns
+                    timestamp_ns=timestamp_ns,
                 )
 
-                self._active_submap.add_keyframe(keyframe=created_keyframe, submap_to_base=icp_result.delta)
+                self._active_submap.add_keyframe(
+                    keyframe=created_keyframe, submap_to_base=icp_result.delta
+                )
 
                 if self._active_submap.is_full():
                     completed_submap = self._active_submap
@@ -145,7 +173,7 @@ class ScanLocalization:
                     self._active_submap = LocalSubmap(
                         origin_keyframe=created_keyframe,
                         max_keyframes=self._config.submap_max_keyframes,
-                        grid_size_m=self._config.submap_grid_size_m
+                        grid_size_m=self._config.submap_grid_size_m,
                     )
 
                     self._map_to_submap = map_to_base
@@ -158,30 +186,44 @@ class ScanLocalization:
             icp_result=icp_result,
             icp_initial_transform=icp_initial_transform,
             icp_correction=icp_correction,
+            icp_processing_time_ms=icp_processing_time_ms,
             created_keyframe=created_keyframe,
-            completed_submap=completed_submap
+            completed_submap=completed_submap,
         )
 
-    def _initialize(self, current_scan: ScanObservation2d, current_odom_pose: Pose2d, timestamp_ns: int) -> LocalizationUpdate:
+    def _initialize(
+        self,
+        current_scan: ScanObservation2d,
+        current_odom_pose: Pose2d,
+        timestamp_ns: int,
+    ) -> LocalizationUpdate:
         # map and odom start off the same
         self._map_to_odom = Pose2d()
-        self._map_to_base = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
+        self._map_to_base = Pose2d(
+            x_m=current_odom_pose.x_m,
+            y_m=current_odom_pose.y_m,
+            yaw_rad=current_odom_pose.yaw_rad,
+        )
 
         created_keyframe = self._create_keyframe(
-            scan=current_scan, 
+            scan=current_scan,
             odom_pose=current_odom_pose,
-            timestamp_ns=timestamp_ns
+            timestamp_ns=timestamp_ns,
         )
 
         self._active_submap = LocalSubmap(
             origin_keyframe=created_keyframe,
             max_keyframes=self._config.submap_max_keyframes,
-            grid_size_m=self._config.submap_grid_size_m
+            grid_size_m=self._config.submap_grid_size_m,
         )
 
         self._map_to_submap = self._map_to_base
 
-        self._last_match_odom_pose = Pose2d(x_m=current_odom_pose.x_m, y_m=current_odom_pose.y_m, yaw_rad=current_odom_pose.yaw_rad)
+        self._last_match_odom_pose = Pose2d(
+            x_m=current_odom_pose.x_m,
+            y_m=current_odom_pose.y_m,
+            yaw_rad=current_odom_pose.yaw_rad,
+        )
 
         return LocalizationUpdate(
             map_to_odom=self._map_to_odom,
@@ -191,11 +233,17 @@ class ScanLocalization:
             icp_result=None,
             icp_initial_transform=None,
             icp_correction=None,
+            icp_processing_time_ms=None,
             created_keyframe=created_keyframe,
-            completed_submap=None
+            completed_submap=None,
         )
 
-    def _evaluate_match(self, result: Optional[ICPResult], odom_delta: Pose2d, current_point_count: int) -> LocalizationStatus:
+    def _evaluate_match(
+        self,
+        result: Optional[ICPResult],
+        odom_delta: Pose2d,
+        current_point_count: int,
+    ) -> LocalizationStatus:
         if result is None:
             return LocalizationStatus.NO_ICP_RESULT
 
@@ -216,34 +264,47 @@ class ScanLocalization:
         rot_correction_rad = abs(correction.yaw_rad)
 
         if (
-            translation_correction_m > self._config.max_translation_correction_m
+            translation_correction_m
+            > self._config.max_translation_correction_m
             or rot_correction_rad > self._config.max_rotation_correction_rad
         ):
             return LocalizationStatus.ODOM_DISAGREEMENT
-        
+
         return LocalizationStatus.ICP_ACCEPTED
 
     def _is_stationary(self, odom_delta: Pose2d) -> bool:
         translation_m = math.hypot(odom_delta.x_m, odom_delta.y_m)
         rot_rad = abs(odom_delta.yaw_rad)
 
-        return translation_m < self._config.min_translation_before_match_m and rot_rad < self._config.min_rotation_before_match_rad
+        return (
+            translation_m < self._config.min_translation_before_match_m
+            and rot_rad < self._config.min_rotation_before_match_rad
+        )
 
-    def _should_create_keyframe(self, relative_pose: Pose2d, status: LocalizationStatus) -> bool:
+    def _should_create_keyframe(
+        self, relative_pose: Pose2d, status: LocalizationStatus
+    ) -> bool:
         if status is not LocalizationStatus.ICP_ACCEPTED:
             return False
 
         translation_m = math.hypot(relative_pose.x_m, relative_pose.y_m)
         rot_rad = abs(relative_pose.yaw_rad)
 
-        return translation_m >= self._config.keyframe_translation_threshold_m or rot_rad >= self._config.keyframe_rotation_threshold_rad
+        return (
+            translation_m >= self._config.keyframe_translation_threshold_m
+            or rot_rad >= self._config.keyframe_rotation_threshold_rad
+        )
 
-    def _create_keyframe(self, scan: ScanObservation2d, odom_pose: Pose2d, timestamp_ns: int) -> Keyframe:
+    def _create_keyframe(
+        self, scan: ScanObservation2d, odom_pose: Pose2d, timestamp_ns: int
+    ) -> Keyframe:
         keyframe = Keyframe(
             id=self._next_keyframe_id,
             timestamp_ns=timestamp_ns,
             scan=scan,
-            odom_pose=Pose2d(x_m=odom_pose.x_m, y_m=odom_pose.y_m, yaw_rad=odom_pose.yaw_rad)
+            odom_pose=Pose2d(
+                x_m=odom_pose.x_m, y_m=odom_pose.y_m, yaw_rad=odom_pose.yaw_rad
+            ),
         )
         self._next_keyframe_id += 1
         return keyframe

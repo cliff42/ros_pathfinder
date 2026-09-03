@@ -17,6 +17,7 @@ from rclpy.time import Time
 
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import TransformStamped
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from nav_msgs.msg import OccupancyGrid
 
 from tf2_ros import (
@@ -46,6 +47,7 @@ class SlamNode(Node):
 
     SCAN_TOPIC = "scan"
     MAP_TOPIC = "map"  # Publishes the occupancy grid.
+    ICP_DIAGNOSTICS_TOPIC = "slam/icp_diagnostics"
 
     MAP_FRAME = "map"
     ODOM_FRAME = "odom"
@@ -197,6 +199,16 @@ class SlamNode(Node):
                 durability=DurabilityPolicy.TRANSIENT_LOCAL
             )
         )
+        self._icp_diagnostics_publisher = self.create_publisher(
+            DiagnosticArray,
+            self.ICP_DIAGNOSTICS_TOPIC,
+            QoSProfile(
+                history=HistoryPolicy.KEEP_LAST,
+                depth=50,
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+                durability=DurabilityPolicy.VOLATILE,
+            ),
+        )
 
         self.transform_broadcaster = TransformBroadcaster(self)
 
@@ -312,6 +324,13 @@ class SlamNode(Node):
             localization_update,
             odom_pose,
         )
+        self._publish_icp_diagnostic(
+            update=localization_update,
+            scan_stamp=msg.header.stamp,
+            current_point_count=int(
+                scan_observation.hit_points_base.shape[0]
+            ),
+        )
 
         if localization_update.status in {
             LocalizationStatus.INITIALIZED,
@@ -411,6 +430,121 @@ class SlamNode(Node):
             f"map_to_base={self._pose_diagnostic_text(update.map_to_base)} "
             f"{icp_quality}"
         )
+
+    def _publish_icp_diagnostic(
+        self,
+        update: LocalizationUpdate,
+        scan_stamp,
+        current_point_count: int,
+    ) -> None:
+        attempted = update.status not in {
+            LocalizationStatus.INITIALIZED,
+            LocalizationStatus.STATIONARY,
+        }
+        accepted = update.status is LocalizationStatus.ICP_ACCEPTED
+        result = update.icp_result
+        correction = update.icp_correction
+
+        inlier_ratio = None
+        if result is not None and current_point_count > 0:
+            inlier_ratio = result.match_count / current_point_count
+
+        correction_translation_m = None
+        correction_rotation_rad = None
+        if correction is not None:
+            correction_translation_m = math.hypot(
+                correction.x_m,
+                correction.y_m,
+            )
+            correction_rotation_rad = abs(correction.yaw_rad)
+
+        pose_step_translation_m = math.hypot(
+            update.chosen_delta.x_m,
+            update.chosen_delta.y_m,
+        )
+        pose_step_rotation_rad = abs(update.chosen_delta.yaw_rad)
+
+        diagnostic = DiagnosticStatus()
+        diagnostic.level = (
+            DiagnosticStatus.OK if accepted or not attempted
+            else DiagnosticStatus.WARN
+        )
+        diagnostic.name = "ros_pathfinder/icp_scan_match"
+        diagnostic.hardware_id = ""
+        diagnostic.message = update.status.value
+        diagnostic.values = [
+            self._diagnostic_value("schema_version", 1),
+            self._diagnostic_value("status", update.status.value),
+            self._diagnostic_value("icp_attempted", attempted),
+            self._diagnostic_value("icp_accepted", accepted),
+            self._diagnostic_value(
+                "current_point_count",
+                current_point_count,
+            ),
+            self._diagnostic_value(
+                "match_count",
+                result.match_count if result is not None else None,
+            ),
+            self._diagnostic_value("inlier_ratio", inlier_ratio),
+            self._diagnostic_value(
+                "rmse_m",
+                result.rmse_m if result is not None else None,
+            ),
+            self._diagnostic_value(
+                "iterations",
+                result.iterations if result is not None else None,
+            ),
+            self._diagnostic_value(
+                "converged",
+                result.converged if result is not None else None,
+            ),
+            self._diagnostic_value(
+                "icp_processing_time_ms",
+                update.icp_processing_time_ms,
+            ),
+            self._diagnostic_value(
+                "correction_translation_m",
+                correction_translation_m,
+            ),
+            self._diagnostic_value(
+                "correction_rotation_rad",
+                correction_rotation_rad,
+            ),
+            self._diagnostic_value(
+                "pose_step_translation_m",
+                pose_step_translation_m,
+            ),
+            self._diagnostic_value(
+                "pose_step_rotation_rad",
+                pose_step_rotation_rad,
+            ),
+            self._diagnostic_value(
+                "accepted_pose_jump_translation_m",
+                correction_translation_m if accepted else None,
+            ),
+            self._diagnostic_value(
+                "accepted_pose_jump_rotation_rad",
+                correction_rotation_rad if accepted else None,
+            ),
+        ]
+
+        msg = DiagnosticArray()
+        msg.header.stamp = scan_stamp
+        msg.header.frame_id = self.MAP_FRAME
+        msg.status = [diagnostic]
+        self._icp_diagnostics_publisher.publish(msg)
+
+    @staticmethod
+    def _diagnostic_value(key: str, value) -> KeyValue:
+        if value is None:
+            text = ""
+        elif isinstance(value, bool):
+            text = str(value).lower()
+        elif isinstance(value, float):
+            text = f"{value:.12g}"
+        else:
+            text = str(value)
+        return KeyValue(key=key, value=text)
 
     @staticmethod
     def _pose_diagnostic_text(pose: Optional[Pose2d]) -> str:
