@@ -591,3 +591,14 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ros2 topic pub --once /goal_pose geometry_msgs/msg/PoseStamped \ 
+
+# "{header: {frame_id: 'map'}, pose: { 
+
+#   position: {x: 3.0, y: 2.0, z: 0.0}, 
+
+#   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0} 
+
+# }}" 
